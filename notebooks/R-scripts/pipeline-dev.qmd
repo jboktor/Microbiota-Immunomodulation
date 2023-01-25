@@ -1,0 +1,72 @@
+---
+title: "Pipeline-Dev"
+editor: visual
+author: "Joe Boktor"
+date: '2023-01-24'
+format: 
+  html:
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+```{r}
+library(reticulate)
+library(tidyverse)
+library(magrittr)
+reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
+```
+
+
+
+```{r}
+# gget tutorial
+
+# gget <- import("gget")
+
+# gget$ref("homo_sapiens")
+# gget$search(list("ace2", "angiotensin converting enzyme 2"), "homo_sapiens")
+# gget$info(list("ENSG00000130234", "ENST00000252519"))
+# gget$seq("ENSG00000130234", translate=TRUE)
+# gget$blat("MSSSSWLLLSLVAVTAAQSTIEEQAKTFLDKFNHEAEDLFYQSSLAS")
+# gget$blast("MSSSSWLLLSLVAVTAAQSTIEEQAKTFLDKFNHEAEDLFYQSSLAS")
+# gget$muscle("path/to/file.fa", out="path/to/out.afa")
+# gget$enrichr(list("ACE2", "AGT", "AGTR1", "ACE", "AGTRAP", "AGTR2", "ACE3P"), database="ontology")
+# gget$archs4("ACE2", which="tissue")
+# gget$pdb("1R42", save=TRUE)
+```
+
+
+```{r}
+
+proteins_of_interest <- c("interleukin", "TGFB", "TNFA")
+tst <- gget$search(proteins_of_interest, "homo_sapiens")
+tst %<>% filter(biotype == "protein_coding")
+# TGFB
+id <- tst %>% filter(gene_name == "TGFB1") %>% pull(ensembl_id)
+id
+tgfb <- gget$seq(id, translate=TRUE)
+
+```
+
+
+```{r}
+tgfb
+
+```
+
+
+```{python}
+import gget
+# setup only needs to be run once
+gget.setup("alphafold") 
+```
+
+```{python}
+
+```
