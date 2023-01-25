@@ -19,10 +19,8 @@ format:
 library(reticulate)
 library(tidyverse)
 library(magrittr)
-reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
+reticulate::use_condaenv(condaenv = 'mim',  required = TRUE)
 ```
-
-
 
 ```{r}
 # gget tutorial
@@ -41,30 +39,37 @@ reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
 # gget$pdb("1R42", save=TRUE)
 ```
 
-
 ```{r}
+gget <- import("gget")
 
 proteins_of_interest <- c("interleukin", "TGFB", "TNFA")
-tst <- gget$search(proteins_of_interest, "homo_sapiens")
-tst %<>% filter(biotype == "protein_coding")
+poi_hits <- gget$search(proteins_of_interest, "homo_sapiens")
+poi_hits %<>% filter(biotype == "protein_coding")
 # TGFB
-id <- tst %>% filter(gene_name == "TGFB1") %>% pull(ensembl_id)
-id
-tgfb <- gget$seq(id, translate=TRUE)
+eid <- poi_hits %>% filter(gene_name == "TGFB1") %>% pull(ensembl_id)
+tgfb <- gget$seq(eid, translate=TRUE)
 
 ```
-
 
 ```{r}
-tgfb
+import("lxml")
 
+#df_blat <- gget$blat(tgfb[2])
+df_blast <- gget$blast(tgfb[2], database = "nr")
 ```
 
+Setup alphafold
 
-```{python}
+```{python, eval = FALSE}
 import gget
 # setup only needs to be run once
-gget.setup("alphafold") 
+gget setup alphafold
+```
+
+```{python}
+tgfb_py = r.tgfb
+gget.alphafold(tgfb_py)
+
 ```
 
 ```{python}
