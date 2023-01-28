@@ -73,6 +73,12 @@ keyname_hits %>% glimpse()
 # -title 'ughp95_v1' \
 # -logfile 'ughp95_v1_blastdb.log'
 
+
+.cluster_runs
+data
+.empty
+.Rproj.user
+.vscode
 ```
 
 
