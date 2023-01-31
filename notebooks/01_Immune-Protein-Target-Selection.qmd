@@ -1,0 +1,32 @@
+---
+title: "Immune Protein Target Selection"
+format: html
+editor: visual
+---
+
+## Project Goals
+
+In this notebook we will explore ....--- data set to determine immune proteins of interest. At a high-level, we are searching for protein that may be targets for interaction with microbial components.
+
+Proteins of interest will likely display some of the following traits:
+
+-   Secretion, Surface Receptors
+
+-   Modulation in immune cells upon activation
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
