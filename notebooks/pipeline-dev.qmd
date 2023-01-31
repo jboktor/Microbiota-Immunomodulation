@@ -28,10 +28,9 @@ reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
 
 ```
 
-
 # Selecting Proteins of Interest
-The current literature on anti-inflammatory cytokines primarily highlight the following: IL-4, IL-6, IL-10, IL-11, and IL-13
-https://www.sciencedirect.com/science/article/abs/pii/S0012369215328208?via%3Dihub 
+
+The current literature on anti-inflammatory cytokines primarily highlight the following: IL-4, IL-6, IL-10, IL-11, and IL-13 https://www.sciencedirect.com/science/article/abs/pii/S0012369215328208?via%3Dihub
 
 ```{r, eval = FALSE}
 gget <- import("gget")
@@ -52,13 +51,10 @@ saveRDS(keyname_hits, glue("{wkdir}/data/interim/tmp/{Sys.Date()}_gget_proteins-
 
 ```
 
-
 ```{r}
 keyname_hits <- readRDS(glue("{wkdir}/data/interim/tmp/2023-01-27_gget_proteins-of-interest.rds"))
 keyname_hits %>% glimpse()
 ```
-
-
 
 ```{r}
 
@@ -81,10 +77,10 @@ data
 .vscode
 ```
 
-
 # Sequence Similarity Screen (BLAST)
+
 Needleman Wunsch algorithm (LaTex) using a BLOSUM62 substitution matrix and affine gap penalties.
- 
+
 $$
 D(i,j) = \max\left\{ 
   \begin{array}{ll}
@@ -93,18 +89,12 @@ D(i,j) = \max\left\{
     D(i, j-1) + g \\
   \end{array}
 \right.$
-$$ 
-
+$$
 
 We will select the human proteins of interest and conduct direct BLAST searches against a microbial database. First, we will need to build a blast reference databae
-
-
-
 
 ```{r}
 
 ```
-
-
 
 # Sequence Similarity Screen (BLAST)

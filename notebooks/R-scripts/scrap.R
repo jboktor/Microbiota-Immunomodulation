@@ -23,10 +23,7 @@ reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
 #' 
 
 
-//write a function to do this for us
 
-
-##
 
 
 
@@ -288,4 +285,35 @@ submitJobs(jobs,
     max.concurrent.jobs = 9999)
 )
 waitForJobs(sleep = 3)
+
+
+
+
+
+
+#_______________________________________________________________________________\
+# Magnify dataset 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
