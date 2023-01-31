@@ -1,0 +1,40 @@
+---
+title: "Microorganism Protein Catalog Curation"
+editor: visual
+author: "Joe Boktor"
+date: '2023-01-24'
+format: 
+  html:
+    font-family: helvetica neueu
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+## Microbial Catalogs
+
+![](https://media.springernature.com/full/springer-static/image/art%253A10.1038%252Fs41587-020-0603-3/MediaObjects/41587_2020_603_Fig1_HTML.png?as=webp)
+
+Recent advances
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
