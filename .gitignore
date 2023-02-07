@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.vscode
+.empty
+.cluster_runs
+data/
+.future/
+notebooks/.ipynb_checkpoints/

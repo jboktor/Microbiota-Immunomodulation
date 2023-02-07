@@ -93,7 +93,9 @@ $$
 
 We will select the human proteins of interest and conduct direct BLAST searches against a microbial database. First, we will need to build a blast reference databae
 
-```{r}
+```{python}
+
+import enabrowsertools
 
 ```
 

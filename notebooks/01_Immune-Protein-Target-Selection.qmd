@@ -1,12 +1,51 @@
 ---
-title: "Immune Protein Target Selection"
-format: html
+title: "Sequence Similarity Screen"
 editor: visual
+author: "Joe Boktor"
+date: '2023-01-24'
+format: 
+  html:
+    font-family: helvetica neueu
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
 ---
 
-## Project Goals
+# Introduction & Background
+Engineered immune cell therapies to selectively modulate lymphocytes or myloeid cells of interest are a promising approach for the treatment of cancer, autoimmune diseases, and other disorders (REFS). A key role of the human immune system is to protect the body from microbial pathogens and parasites (REFS). While the human immune system has evolved to recognize and respond to microbial components and pathogens (REFS), microbial pathogens have simultaneously evolved to evade immune recognition and repress inflammatory cell signaling cascades (REFS). Within the last __ years, ___ additional microbal genomes have been sequenced due to an increase in accessibilty to next generate sequencesing (NGS) (REFS). Thus, microbial and parastic interactions with the human immune system may provide an interesting opportunity to develop novel immune therapeutics.
 
-In this notebook we will explore ....--- data set to determine immune proteins of interest. At a high-level, we are searching for protein that may be targets for interaction with microbial components.
+The human body is host to a diverse community of microbes and parasites. It is estimated that __ microbes colonize the human body. Within the gastrointestinal tract, the human body will pass up to __ grams of microbial mass. While the innate immune systems is present in _ branch of the phylogenetic tree__ the adaptive immune system is detectable witihin the __branch___ thought to have evolved over __ years ago. 
+
+Our hypothesis is that over __ years, microbes and the humman immune system have evolved such that ___. In this project we will explore the hypothesis that human associated microbes and parasites have evolved mechanisms modulate the human immune system. our analysis will mine microbial and parastic genomic datasbases to search for 1) signatures of mimetick microbial proteins which resemble immune proteins of interest, and 2) microbial proteins which may be targets for interaction with immune proteins which may target inhibitory/excitatory pathway components.
+
+Inspiration for this project arises from two instances. The first of which is the discovery of a Transforming Growth Factor Beta (TGF-β) homolog within parastic roundworms (REF). In fact, there are a number of suspected parastic homolgs to human immune proteins that are known to modulate the immune system. (RESEARH THIS -- Are these proteins homologs or paralogs?,   Should we expect these proteins to exist in roundworms due to phylogenetic proximity? Or is this an adaptivion to the host to trigger immune tolerance?).
+
+The second is the discovery of microbial protiens which interfere with proper ITIM and ITAM signaltling (REF). This findings suggests that microbial proteins may interfere with the proper functioning of the immune system. 
+
+The discover of microbial proteins capable of modulating the immune system provides an exciting opportunity to develop novel therapeutics.
+
+
+
+
+## Objectives
+
+The goal of our project will be to identify microbial proteins with any of the folling features
+1. Molecular mimicry of human immune proteins involved in immune cell signaling
+2. Novel protein interactions with host signaling proteins that can modulate inhibitory or excitatory immune signaling pathways. 
+
+The goal of this notebook will be to determine which host immune cell proteins are most likely targets for molecular mimicry by microbial proteins, and/or targets for interaction by microbial proteins. Proteins selected in this notebook will be used to search microbial and parastic genomic databases for homologs or paralogs.
+
+
+
+microbial proteins may be targets for interaction with immune proteins. 
+
+ At a high-level, we are searching for protein that may be targets for interaction with microbial components.
+
 
 Proteins of interest will likely display some of the following traits:
 

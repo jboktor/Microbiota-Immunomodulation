@@ -3,6 +3,7 @@ title: "Microorganism Protein Catalog Curation"
 editor: visual
 author: "Joe Boktor"
 date: '2023-01-24'
+eval: false
 format: 
   html:
     font-family: helvetica neueu
@@ -16,25 +17,123 @@ format:
     fig-align: center
 ---
 
-## Microbial Catalogs
+## Genome / Protein Catalogs
 
-![](https://media.springernature.com/full/springer-static/image/art%253A10.1038%252Fs41587-020-0603-3/MediaObjects/41587_2020_603_Fig1_HTML.png?as=webp)
+- UHGG v2.0:
+https://www.ebi.ac.uk/about/news/updates-from-data-resources/uhgg-v20-released-mgnify/
+- 289,232 prokaryotic genomes clustered into 4,744 species representatives. 
+  - now includes 3,452 isolate genomes from BIO-ML (The Broad Institute-OpenBiome Microbiome Library), + 2,426 MAGs from PRJEB37358 “Recovery of novel prokaryotic genomes associated with metabolic diseases such as T2D and T2D-related comorbidities”
 
-Recent advances
+-  (KIJ) Korean-Indian-Japanese (under-represented populations)
 
-## Running Code
+ Human reference gut microbiome catalog including newly assembled genomes from under-represented Asian metagenomes
+  - https://www.mbiomenet.org/HRGM/listdir.php?directory=./data/protein_catalog/3.KIJ-UHGP_unique_Proteins/ 
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+- A compendium of 32,277 metagenome-assembled genomes and over 80 million genes from the early-life human gut microbiome
+  - https://zenodo.org/record/6969520#.Y9mFv-zMK-Y 
 
+
+
+
+## Downloading protein catalogs
+
+Analysis Setup
 ```{r}
-1 + 1
+library(tidyverse)
+library(reticulate)
+library(magrittr)
+library(glue)
+library(seqinr)
+library(future)
+library(future.batchtools)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R-scripts/helpers_general.R"))
+source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
+
 ```
 
-You can add options to executable code like this
-
+UHGP v 2.0
 ```{r}
-#| echo: false
-2 * 2
+uhgp_ftp_links <- c(
+  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-90.tar.gz",
+  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-95.tar.gz",
+  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-100.tar.gz",
+  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-50.tar.gz"
+)
+
+library(fs)
+for (f in uhgp_ftp_links) {
+  jname <- fs::path_ext_remove(basename(f))
+  wget_download_slurm(
+    jobname = jname,
+    slurm_out = "/central/scratch/jbok/slurmdump/",
+    download_link = f
+  )
+}
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+
+#### ELGG 
+```{r}
+# Download 95% ELGG protein faa via https://zenodo.org/record/6969520/files/ELGP_95.faa.gz?download=1
+# wget https://zenodo.org/record/6969520/files/ELGP_95.faa.gz 
+wget_download_slurm(
+  jobname = "ELGG",
+  download_link = "https://zenodo.org/record/6969520/files/ELGP_95.faa.gz",
+  slurm_out = "/central/scratch/jbok/slurmdump/"
+  )
+shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz")
+```
+
+#### KIJ 
+
+```{r}
+# HRGM (KIJ 100 only) using 110 India, 645 Japan, and 90 Korean fecal samples
+# https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz
+wget_download_slurm(
+  jobname = "HRGM_KIJ100",
+  download_link = "https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz",
+  slurm_out = "/central/scratch/jbok/slurmdump/"
+)
+shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz")
+
+```
+
+
+#### HADZA / NEPALI
+
+```{r}
+
+```
+
+
+#### RUMMETA
+Ruminants
+```{r}
+#' https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x 
+#' An integrated gene catalog and over 10,000 metagenome-assembled genomes 
+#' from the gastrointestinal microbiome of ruminants
+# http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz
+
+wget_download_slurm(
+  jobname = "RUMMETA",
+  download_link = "http://rummeta.njau.edu.cn/rumment/download/RGMGC.geneSet.faa.gz", 
+  slurm_out = "/central/scratch/jbok/slurmdump/"
+  )
+
+```
+
+
+#### RUMMETA
+
+```{r}
+
+```
