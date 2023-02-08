@@ -1,5 +1,5 @@
 ---
-title: "Microorganism Protein Catalog Curation"
+title: "Protein Catalog Curation"
 editor: visual
 author: "Joe Boktor"
 date: '2023-01-24'
@@ -19,25 +19,90 @@ format:
 
 ## Genome / Protein Catalogs
 
-- UHGG v2.0:
-https://www.ebi.ac.uk/about/news/updates-from-data-resources/uhgg-v20-released-mgnify/
-- 289,232 prokaryotic genomes clustered into 4,744 species representatives. 
-  - now includes 3,452 isolate genomes from BIO-ML (The Broad Institute-OpenBiome Microbiome Library), + 2,426 MAGs from PRJEB37358 “Recovery of novel prokaryotic genomes associated with metabolic diseases such as T2D and T2D-related comorbidities”
+## Prokaryotes (Bacteria and Archaea)
 
--  (KIJ) Korean-Indian-Japanese (under-represented populations)
+#### UHGG -
 
- Human reference gut microbiome catalog including newly assembled genomes from under-represented Asian metagenomes
-  - https://www.mbiomenet.org/HRGM/listdir.php?directory=./data/protein_catalog/3.KIJ-UHGP_unique_Proteins/ 
+-   
 
-- A compendium of 32,277 metagenome-assembled genomes and over 80 million genes from the early-life human gut microbiome
-  - https://zenodo.org/record/6969520#.Y9mFv-zMK-Y 
+#### **HRGM-KIJ**
 
+-   
 
+#### **ELGG**
 
+-   
 
-## Downloading protein catalogs
+#### **HADZA**
+
+-   
+
+#### WEIS
+
+-   
+
+#### **RUMMETA**
+
+-   
+
+#### **RUGs**
+
+-   
+
+Eukaryotic
+
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| Catalog                                                            | Release | Domain(s)                         | Samples                            | Genomes            | Proteins       | DOI                                                                                        | catalog                                                                                                  |
++====================================================================+=========+===================================+====================================+====================+================+============================================================================================+==========================================================================================================+
+| **UHGG/UHGP**                                                      | 2022    | Bacteria                          | 25,088 + cultured genome resources | 289,232            | \>170 million  | [link](https://www.nature.com/articles/s41587-020-0603-3)                                  | [link](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/)                 |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| Mgnify Unified Human Gastrointestinal Genomes/Proteins v2.0.1      |         | Archaeal                          |                                    |                    |                | [link](https://www.nature.com/articles/s41591-019-0559-3)                                  |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| **HRGM-KIJ**                                                       | 2021    | Bacteria                          | 845                                | 232,098            | \>103 million  | [link](https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-021-00950-7)       | [link](https://www.mbiomenet.org/HRGM/listdir.php?directory=data/protein_catalog)                        |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| Human Reference Gut Microbiome (Korea, India, Japan)               |         | Archaeal                          |                                    | (includes UHGG v1) |                |                                                                                            |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| **ELGG/ELGP**                                                      | 2022    | Bacteria                          | 32,277                             | 6122               | \>80 million   | [link](https://www.nature.com/articles/s41467-022-32805-z)                                 | [link](https://zenodo.org/record/6969520/files/ELGP_95.faa.gz)                                           |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| Early-Life Gut Genomes/Proteins                                    |         | Archaeal                          |                                    |                    |                |                                                                                            |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| **HADZA**                                                          | 2022    | Bacteria                          | 351                                | 94,971             |                | link                                                                                       | [link](https://www.biorxiv.org/content/10.1101/2022.03.30.486478v2.full)                                 |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| African Hadza tribe and comparative Nepali, and California samples |         | Archaeal,                         |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         | Bacteriophages                    |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         | Eukaryotes,                       |                                    |                    |                |                                                                                            |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| **RUMMETA**                                                        | 2021    | Bacteria                          | 370                                | 10,373             | \> 154 million | [link](http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz) | [link](https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x#MOESM5)           |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| 10 GIT regions of seven ruminant species                           |         | Archaeal                          |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+|                                                                    |         | (maybe some virus and eukaryotes) |                                    |                    |                |                                                                                            |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| **RUGs**                                                           | 2019    | Bacteria                          | 207                                | 5588               | TBD            | [link](https://www.nature.com/articles/s41587-019-0202-3)                                  | [link](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/cow-rumen/v1.0/protein_catalogue/) |
+|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
+| MGnify Cow Rumen v1.0                                              |         | Archaeal                          |                                    |                    |                | [link](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02144-7)        |                                                                                                          |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| Worm Base                                                          |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                     |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+| EuPathDB                                                           |         |                                   |                                    |                    |                | link                                                                                       | [link](https://veupathdb.org/veupathdb/app/downloads/Current_Release/)                                   |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                     |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                     |
++--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
+
+## Eukaryotic-Host Parasites (Eukaryotes, Fungi, Protozoa)
+
+https://veupathdb.org/veupathdb/app/downloads/Current_Release/
+
+## Viral Data
+
+Downloading protein catalogs
 
 Analysis Setup
+
 ```{r}
 library(tidyverse)
 library(reticulate)
@@ -53,15 +118,15 @@ wkdir <- glue(
   "{homedir}/",
   "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
 )
-
 src_dir <- glue("{wkdir}/notebooks")
 source(glue("{src_dir}/R-scripts/helpers_general.R"))
 source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
-
+protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs/")
 ```
 
-UHGP v 2.0
-```{r}
+### UHGP v 2.0
+
+```{r, eval = FALSE}
 uhgp_ftp_links <- c(
   "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-90.tar.gz",
   "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-95.tar.gz",
@@ -75,38 +140,40 @@ for (f in uhgp_ftp_links) {
   wget_download_slurm(
     jobname = jname,
     slurm_out = "/central/scratch/jbok/slurmdump/",
-    download_link = f
+    download_link = f,
+    output_dir = protein_catalogs
   )
 }
 ```
 
+#### ELGG
 
-#### ELGG 
-```{r}
+```{r, eval = FALSE}
 # Download 95% ELGG protein faa via https://zenodo.org/record/6969520/files/ELGP_95.faa.gz?download=1
 # wget https://zenodo.org/record/6969520/files/ELGP_95.faa.gz 
 wget_download_slurm(
   jobname = "ELGG",
   download_link = "https://zenodo.org/record/6969520/files/ELGP_95.faa.gz",
-  slurm_out = "/central/scratch/jbok/slurmdump/"
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  output_dir = protein_catalogs
   )
 shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz")
 ```
 
-#### KIJ 
+#### KIJ
 
-```{r}
+```{r, eval = FALSE}
 # HRGM (KIJ 100 only) using 110 India, 645 Japan, and 90 Korean fecal samples
 # https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz
 wget_download_slurm(
   jobname = "HRGM_KIJ100",
   download_link = "https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz",
-  slurm_out = "/central/scratch/jbok/slurmdump/"
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  output_dir = protein_catalogs
 )
 shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz")
 
 ```
-
 
 #### HADZA / NEPALI
 
@@ -114,10 +181,11 @@ shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KI
 
 ```
 
-
 #### RUMMETA
+
 Ruminants
-```{r}
+
+```{r, eval = FALSE}
 #' https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x 
 #' An integrated gene catalog and over 10,000 metagenome-assembled genomes 
 #' from the gastrointestinal microbiome of ruminants
@@ -126,13 +194,50 @@ Ruminants
 wget_download_slurm(
   jobname = "RUMMETA",
   download_link = "http://rummeta.njau.edu.cn/rumment/download/RGMGC.geneSet.faa.gz", 
-  slurm_out = "/central/scratch/jbok/slurmdump/"
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  output_dir = protein_catalogs
   )
 
 ```
 
+#### RUGs
 
-#### RUMMETA
+```{r}
+
+rug_ftp_links <- 
+  paste0(
+    "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/",
+    "cow-rumen/v1.0/protein_catalogue/protein_catalogue-", 
+    c(100, 95, 90, 50), ".tar.gz")
+
+library(fs)
+for (f in rug_ftp_links) {
+  jname <- fs::path_ext_remove(basename(f))
+  wget_download_slurm(
+    jobname = jname,
+    slurm_out = "/central/scratch/jbok/slurmdump/",
+    download_link = f,
+    output_dir = protein_catalogs
+  )
+}
+
+```
+
+#### Parasitic Databases
+
+```{r}
+
+```
+
+## Catalog Assembly
+
+Visualized shared and distinct proteins for each db
+
+```{r}
+
+```
+
+Emebed proteins in ESM2 and display low dimensional representation and functional annotation
 
 ```{r}
 

@@ -9,7 +9,7 @@
 <meta name="author" content="Joe Boktor">
 <meta name="dcterms.date" content="2023-01-24">
 
-<title>Microorganism Protein Catalog Curation</title>
+<title>Protein Catalog Curation</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -2609,8 +2609,11 @@ vertical-align: -.125em;
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#microbial-catalogs" id="toc-microbial-catalogs" class="nav-link active" data-scroll-target="#microbial-catalogs">Microbial Catalogs</a></li>
-  <li><a href="#running-code" id="toc-running-code" class="nav-link" data-scroll-target="#running-code">Running Code</a></li>
+  <li><a href="#genome-protein-catalogs" id="toc-genome-protein-catalogs" class="nav-link active" data-scroll-target="#genome-protein-catalogs">Genome / Protein Catalogs</a>
+  <ul class="collapse">
+  <li><a href="#uhgp-v-2.0" id="toc-uhgp-v-2.0" class="nav-link" data-scroll-target="#uhgp-v-2.0">UHGP v 2.0</a></li>
+  </ul></li>
+  <li><a href="#catalog-assembly" id="toc-catalog-assembly" class="nav-link" data-scroll-target="#catalog-assembly">Catalog Assembly</a></li>
   </ul>
 </nav>
 </div>
@@ -2620,7 +2623,7 @@ vertical-align: -.125em;
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<div class="quarto-title-block"><div><h1 class="title">Microorganism Protein Catalog Curation</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+<div class="quarto-title-block"><div><h1 class="title">Protein Catalog Curation</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
 </div>
 
 
@@ -2647,30 +2650,271 @@ vertical-align: -.125em;
 
 </header>
 
-<section id="microbial-catalogs" class="level2">
-<h2 class="anchored" data-anchor-id="microbial-catalogs">Microbial Catalogs</h2>
-<p><img src="data:text/html; charset=UTF-8;charset=utf-8,%3C%21DOCTYPE%20html%3E%0A%3Chtml%3E%0A%3Chead%3E%0A%09%3Ctitle%3ENot%20Found%3C%2Ftitle%3E%0A%09%3Cstyle%20type%3D%22text%2Fcss%22%3E%0A%09body%20%7B%0A%09%09margin%3A%200%3B%0A%09%09padding%3A%200%3B%0A%09%09font%2Dfamily%3A%20Helvetica%2C%20Verdana%2C%20Arial%2C%20sans%2Dserif%3B%0A%09%09font%2Dsize%3A%2016px%3B%0A%09%09color%3A%20rgb%2891%2C%2091%2C%2091%29%3B%0A%09%7D%0A%0A%09%2Econtent%2C%20%2Eheader%20%7B%0A%09%09margin%2Dleft%3A%20auto%3B%0A%09%09margin%2Dright%3A%20auto%3B%0A%09%09width%3A%2060%25%3B%0A%09%09min%2Dwidth%3A%20300px%3B%0A%09%7D%0A%0A%09%2Eheader%20%7B%0A%09%09margin%2Dtop%3A%2030px%3B%0A%09%09margin%2Dbottom%3A%2080px%3B%0A%09%7D%0A%0A%09%2Econtent%2D%2Dheading%20%7B%0A%09%09color%3A%20rgb%28142%2C%20142%2C%20142%29%3B%0A%09%09font%2Dsize%3A%2036px%3B%0A%09%09font%2Dweight%3A%20normal%3B%0A%09%09padding%2Dbottom%3A%2015px%3B%0A%09%09border%2Dbottom%3A%201px%20solid%20rgb%28221%2C%20231%2C%20234%29%3B%0A%09%7D%0A%0A%09a%20%7B%0A%09%09color%3A%20rgb%2880%2C%20161%2C%20215%29%3B%0A%09%09text%2Ddecoration%3A%20none%3B%0A%09%7D%0A%09%3C%2Fstyle%3E%0A%3C%2Fhead%3E%0A%3Cbody%3E%0A%09%3Cheader%20class%3D%22header%22%3E%0A%09%09%3Ca%20href%3D%22https%3A%2F%2Fwww%2Espringernature%2Ecom%2F%22%3E%3Cimg%20src%3D%22data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAAQMAAAAaCAYAAACzfzksAAAABmJLR0QA%2FwD%2FAP%2BgvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3wYaBzgTCTatoQAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdGggR0lNUFeBDhcAAAghSURBVHja7V1Bbts6EH0NDGj59U9QdaGNAeGrJzB9gtpLraKcIPEJ4pzAyQkir7T87gksnyAuBGjjRdQTfG%2B96l%2BIbhSFlEhqZCeuBzDa2hJFjoZv3syQ7CeIxAscACMAduWXLYAEabzGWc5SkcxyQwCO4Ke8v9tEmvcl%2Fd0mOWv1cNITgMAjAFZ7lxfkAOYA7pHG27Maz8LlUmY7meUm%2Fd0m17zvDAZHAQMv8AEsBWxAJA6AWwDXAP4%2Bq9FACn2XdZ0jjfMTHnEIYHp%2B8e8dDLzA1gCCsiwqBj4D4CvctwKwkIYbXrBUaGNbaievmXQh9zxVmbx6vvy6HGl8JZnMs8q3a6TxpKYvjAPoSPL7luv0O9J4YaiX15LGw4Y%2BQzjmF91SMb%2FrzHLv%2B7sNSXuZ5U4BDBouu6qykcxyVW30jfR3myFvQ6bHeTUcUr1WsV9bAD8ALPq7zboh7LrUHN68V0Jt20A%2Fd5V%2F%2B40hRiEMwC28IAFwJZjMTPH5IwAzeEHEJ%2FdWwmJE7dmK1wFeMEcaJ4L7mbKmvOCR67lObH5NyEOxcQUwWcs5pNPnkOv2gSgctAHcELKDbwqThwGIDG3URI%2BrFteq9msE4Daz3ATARAIKjsEYVxclxYpkDWAMYMg%2F99xrAEBEQGsZgCeeq2hLQZ%2B55%2BtCbluGBCpAIHqhxxabj33J2WNrdkDECmxF7z7A6QoDsMwsd0TV4EUJlUQyRhovkMYJ%2F0yQxl84MNwRGtwjUTv%2FdqZ4U8DyghsDINiHHO%2BlauNTvSNOYSkmgmq%2FT1lsAI%2BZ5ZI4jp6EMu%2FjzVzyfaLxjBxF5QEAPksmBoMX%2BA3Gn5So1UBiEA68IEQaRx2xgytCVrEF8ICXjLnNx7UP2R409NuWoUUAfvK%2FX0pYyQhe4BCwwVsBddcVVY%2FvZ5ZrV%2FIUa0Vw2UquPaSozB1b0TabxpP3ShfaAq9GMbFypPH0VfxdJCtFL6Sus6tKOzMeg4piyS7AIIQX3GlNBi8YSYB2C2AoAL8FgAlPZi5UEz%2Bv9GIm5ZzIFF7wJPGqIUHM72SWG9atOzBkBrkExFhZl%2F3dZiIIO36JmNk%2BYXhMMOjvNtNSP39AnIxUYUqN47koeV2RPMILZkTxYplV5BKE0zPgw8fauhRX5sEmtSwojaMjr9%2BQ6fazIesgyx3U5AvuTj1v0N9t7ru0%2BT0YfK%2B55gZFcm5KCAo5AaisjwAG15o6kMWsi3dud5S6nQvet59ZLjPsG5NMlEhiVwynJXlXDfd%2BeyIvuKxR3D4uuSYsNR3akKkSNiGKqoopGCTEuvvM1y%2BIdUH7rJXhfXd4m4C8hdkKw4FQpy9%2Fhgp5g48spg7ZrgHgbX%2B3WV%2BUvhgrTKQ9KDwZl%2FEKz%2Bq3RrwiHu8aOdtSXPsAyB7yHIzoY5pNl5WaTSfUQnAvM2QHfg1IrTQZ2ocSXjWwDR2gX2Mns3KYAKTxFmn8FWolQwdF7dkxAIKZZECJRjsO5Fn6FaH%2BfwoovcMTfG3aLI9lCi%2F4JfksD25xBcsIKcMb7pUfiHIHrGYyJDqhxQcEAll59ztlzqAci08BfEFzRl51fQD7bdzAfxJDSxSy9Leldp6l7IK%2BrEhlxO9ZliXdypalt11kdi9gByOdGnkNk0g46OQS9vJRk4gss9xfvNrxDHkJNOoGDApA2K%2FH%2F9LgDRjBqr8tgAmR8sbkr6OofiQCysXw50jrd8TZQSQE%2BZasoJIPSE6RGdTIpGY3qJb0GiZCDmDM4%2FNHicdgME%2FabVHsTaBI%2Bk06XLF3JzAoU3bwjyCHkPDQyzHqW%2Ft1Bk0yJEpEPuDt2pBQI48yUAgvVxBsBMssl53g%2BQj3Gus1EtV1Bk3ecVGTS7ANQSAC8FW4O89MvnWmcjE7UBl33qivYk3BEPLa%2FnsQkvXv3IOJjFcVBEUefpRZ7nL%2FgXy33imygxFlYz2Na029bl4y9DWAreZy5rIHWJW8si0IWZhh26bsQGXsjqCf9jsrzUYoEpt%2FQbyq8xpeQFVOvoPBXo2afIEqozpE3oD6GeW5I9qlSbGaUwAGXvDMH%2F4g8dbXGt7v9e80NPZlOXKxvfdREn92AwZpnPAt10yrzxJvhm6WTJvKy3LkouITCtgMyfbj%2Fm6TZ5YbGQBCW89OVl7s7zZJZrmqLNmvcW6NYLBfjsy3LC8lNk8IBkU5aY%2BwjB%2BykaA4SOEvbrxOi0FRT8yI700QsQP%2FwLkDEzY1gxdQ7UocwAumNbqaGowxlDiDKRn40C3tVhU7s1y%2F7lAQg1C3an9%2BZrk3%2B2XDvFJi6kRFACRyRqrswOEHwkiZd6%2BELlWEGynEJMkRj%2BqKJJT2El2tQtRlB2m84CzGEej3CV6wxkspzDc0QNbQn6nmGHPeL%2F9Nn4l2hNYYtq5nzyW5FtmuVkZoGwsJoM34qUW188awAjCXjOtSgR04aKjcXHBWYErBJjiezA%2BRVJF4Tiod%2BaXJrJKQTI6s22%2FH0CM%2FOkykn3l%2Ft5lWP5Bv%2Fx4c0Q4o7pUl2xnfwNXESFEPBvvjz%2FUp0tVRD98oni0%2B5qy7E49klYV6dkCXH3g4kHaTjuL2V%2BxAw2iZZj%2FXB%2Bh%2FDrPzLa5MS5x8PUXS5AT7u83CBBAukMZrXtoacqNtyhhHKEqCEY4v666TRSSTsljAdaURJ6759WMBEI3R4c61EtAK425ioFXV40Dn%2FfOJmsvyBoSAEPF5ozK5FwC%2BEmT%2BVXeUDqG5fPyT8NuXY7xZKTbLOyzb%2FTlSH5YV3vL8f1F8OCmds1AOafanC60%2Fwq7J%2FwE92T8XXLwiIAAAAABJRU5ErkJggg%3D%3D%22%20alt%3D%22SpringerNature%22%3E%3C%2Fa%3E%0A%09%3C%2Fheader%3E%0A%09%3Csection%20class%3D%22content%22%3E%0A%09%09%3Ch1%20class%3D%22content%2D%2Dheading%22%3EPage%20not%20found%3C%2Fh1%3E%0A%09%09%3Cp%3ESorry%2C%20the%20page%20you%20requested%20is%20unavailable%2E%20The%20link%20you%20requested%20might%20be%20broken%2C%20or%20no%20longer%20exists%2E%3C%2Fp%3E%0A%09%09%3Cp%3EWhy%20not%20start%20at%20our%20%3Ca%20href%3D%22https%3A%2F%2Fwww%2Espringernature%2Ecom%2F%22%3Ehomepage%3C%2Fa%3E%3F%3C%2Fp%3E%0A%09%3C%2Fsection%3E%0A%3C%2Fbody%3E%0A%3C%2Fhtml%3E" class="img-fluid"></p>
-<p>Recent advances</p>
-</section>
-<section id="running-code" class="level2">
-<h2 class="anchored" data-anchor-id="running-code">Running Code</h2>
-<p>When you click the <strong>Render</strong> button a document will be generated that includes both content and the output of embedded code. You can embed code like this:</p>
+<section id="genome-protein-catalogs" class="level2">
+<h2 class="anchored" data-anchor-id="genome-protein-catalogs">Genome / Protein Catalogs</h2>
+<table class="table">
+<thead>
+<tr class="header">
+<th>Catalog</th>
+<th>Release</th>
+<th>Domain(s)</th>
+<th>Samples</th>
+<th>Genomes</th>
+<th>Proteins</th>
+<th>DOI</th>
+<th>catalog</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><p><strong>UHGG/UHGP</strong></p>
+<p>Mgnify Unified Human Gastrointestinal Genomes/Proteins v2.0.1</p></td>
+<td>2022</td>
+<td><p>Bacteria</p>
+<p>Archaeal</p></td>
+<td>25,088 + cultured genome resources</td>
+<td>289,232</td>
+<td>&gt;170 million</td>
+<td><p><a href="https://www.nature.com/articles/s41587-020-0603-3">link</a></p>
+<p><a href="https://www.nature.com/articles/s41591-019-0559-3">link</a></p></td>
+<td><a href="http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/">link</a></td>
+</tr>
+<tr class="even">
+<td><p><strong>HRGM-KIJ</strong></p>
+<p>Human Reference Gut Microbiome (Korea, India, Japan)</p></td>
+<td>2021</td>
+<td><p>Bacteria</p>
+<p>Archaeal</p></td>
+<td>845</td>
+<td><p>232,098</p>
+<p>(includes UHGG v1)</p></td>
+<td>&gt;103 million</td>
+<td><a href="https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-021-00950-7">link</a></td>
+<td><a href="https://www.mbiomenet.org/HRGM/listdir.php?directory=data/protein_catalog">link</a></td>
+</tr>
+<tr class="odd">
+<td><p><strong>ELGG/ELGP</strong></p>
+<p>Early-Life Gut Genomes/Proteins</p></td>
+<td>2022</td>
+<td><p>Bacteria</p>
+<p>Archaeal</p></td>
+<td>32,277</td>
+<td>6122</td>
+<td>&gt;80 million</td>
+<td><a href="https://www.nature.com/articles/s41467-022-32805-z">link</a></td>
+<td><a href="https://zenodo.org/record/6969520/files/ELGP_95.faa.gz">link</a></td>
+</tr>
+<tr class="even">
+<td><p><strong>HADZA</strong></p>
+<p>African Hadza tribe and comparative Nepali, and California samples</p></td>
+<td>2022</td>
+<td><p>Bacteria</p>
+<p>Archaeal,</p>
+<p>Bacteriophages</p>
+<p>Eukaryotes,</p></td>
+<td>351</td>
+<td>94,971</td>
+<td></td>
+<td>link</td>
+<td>link</td>
+</tr>
+<tr class="odd">
+<td><p><strong>RUMMETA</strong></p>
+<p>10 GIT regions of seven ruminant species</p></td>
+<td>2021</td>
+<td><p>Bacteria</p>
+<p>Archaeal</p>
+<p>(maybe some virus and eukaryotes)</p></td>
+<td>370</td>
+<td>10,373</td>
+<td>&gt; 154 million</td>
+<td><a href="http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz">link</a></td>
+<td><a href="https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x#MOESM5">link</a></td>
+</tr>
+<tr class="even">
+<td><p><strong>RUGs</strong></p>
+<p>MGnify Cow Rumen v1.0</p></td>
+<td>2019</td>
+<td><p>Bacteria</p>
+<p>Archaeal</p></td>
+<td>207</td>
+<td>5588</td>
+<td>TBD</td>
+<td><p><a href="https://www.nature.com/articles/s41587-019-0202-3">link</a></p>
+<p><a href="https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02144-7">link</a></p></td>
+<td><a href="http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/cow-rumen/v1.0/protein_catalogue/">link</a></td>
+</tr>
+<tr class="odd">
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>link</td>
+<td>link</td>
+</tr>
+<tr class="even">
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>link</td>
+<td>link</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>link</td>
+<td>link</td>
+</tr>
+<tr class="even">
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>link</td>
+<td>link</td>
+</tr>
+</tbody>
+</table>
+<p>Downloading protein catalogs</p>
+<p>Analysis Setup</p>
 <div class="cell">
 <details>
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">+</span> <span class="dv">1</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(reticulate)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(magrittr)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glue)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(seqinr)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(future)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(future.batchtools)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>tmpdir <span class="ot">&lt;-</span> <span class="st">&quot;/central/scratch/jbok/tmp&quot;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>homedir <span class="ot">&lt;-</span> <span class="st">&quot;/central/groups/MazmanianLab/joeB&quot;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>wkdir <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;{homedir}/&quot;</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Microbiota-Immunomodulation/Microbiota-Immunomodulation&quot;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>src_dir <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">&quot;{wkdir}/notebooks&quot;</span>)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">glue</span>(<span class="st">&quot;{src_dir}/R-scripts/helpers_general.R&quot;</span>))</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">glue</span>(<span class="st">&quot;{src_dir}/R-scripts/helpers_sequence-screens.R&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<div class="cell-output cell-output-stdout">
-<pre><code>[1] 2</code></pre>
 </div>
-</div>
-<p>You can add options to executable code like this</p>
+<section id="uhgp-v-2.0" class="level3">
+<h3 class="anchored" data-anchor-id="uhgp-v-2.0">UHGP v 2.0</h3>
 <div class="cell">
-<div class="cell-output cell-output-stdout">
-<pre><code>[1] 4</code></pre>
+<details>
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>uhgp_ftp_links <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-90.tar.gz&quot;</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-95.tar.gz&quot;</span>,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-100.tar.gz&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-50.tar.gz&quot;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(fs)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (f <span class="cf">in</span> uhgp_ftp_links) {</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  jname <span class="ot">&lt;-</span> fs<span class="sc">::</span><span class="fu">path_ext_remove</span>(<span class="fu">basename</span>(f))</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">wget_download_slurm</span>(</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">jobname =</span> jname,</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span>,</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">download_link =</span> f</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
 </div>
+<section id="elgg" class="level4">
+<h4 class="anchored" data-anchor-id="elgg">ELGG</h4>
+<div class="cell">
+<details>
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Download 95% ELGG protein faa via https://zenodo.org/record/6969520/files/ELGP_95.faa.gz?download=1</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># wget https://zenodo.org/record/6969520/files/ELGP_95.faa.gz </span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;ELGG&quot;</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;https://zenodo.org/record/6969520/files/ELGP_95.faa.gz&quot;</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="fu">shell_do</span>(<span class="st">&quot;gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
 </div>
-<p>The <code>echo: false</code> option disables the printing of code (only output is displayed).</p>
+</section>
+<section id="kij" class="level4">
+<h4 class="anchored" data-anchor-id="kij">KIJ</h4>
+<div class="cell">
+<details>
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># HRGM (KIJ 100 only) using 110 India, 645 Japan, and 90 Korean fecal samples</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;HRGM_KIJ100&quot;</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz&quot;</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="fu">shell_do</span>(<span class="st">&quot;gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="hadza-nepali" class="level4">
+<h4 class="anchored" data-anchor-id="hadza-nepali">HADZA / NEPALI</h4>
+<div class="cell">
+
+</div>
+</section>
+<section id="rummeta" class="level4">
+<h4 class="anchored" data-anchor-id="rummeta">RUMMETA</h4>
+<p>Ruminants</p>
+<div class="cell">
+<details>
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x </span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; An integrated gene catalog and over 10,000 metagenome-assembled genomes </span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; from the gastrointestinal microbiome of ruminants</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;RUMMETA&quot;</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;http://rummeta.njau.edu.cn/rumment/download/RGMGC.geneSet.faa.gz&quot;</span>, </span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="rummeta-1" class="level4">
+<h4 class="anchored" data-anchor-id="rummeta-1">RUMMETA</h4>
+<div class="cell">
+
+</div>
+</section>
+<section id="parasitic-databases" class="level4">
+<h4 class="anchored" data-anchor-id="parasitic-databases">Parasitic Databases</h4>
+<div class="cell">
+
+</div>
+</section>
+</section>
+</section>
+<section id="catalog-assembly" class="level2">
+<h2 class="anchored" data-anchor-id="catalog-assembly">Catalog Assembly</h2>
+<p>Visualized shared and distinct proteins for each db</p>
+<div class="cell">
+
+</div>
+<p>Emebed proteins in ESM2 and display low dimensional representation and functional annotation</p>
+<div class="cell">
+
+</div>
 <!-- -->
 
 </section>
@@ -2861,46 +3105,187 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
   }
 });
 </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class>
-<div class="sourceCode" id="cb4" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> &quot;Microorganism Protein Catalog Curation&quot;</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="an">editor:</span><span class="co"> visual</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> &quot;Joe Boktor&quot;</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> &#39;2023-01-24&#39;</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span><span class="co"> </span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">    font-family: helvetica neueu</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co">    page-layout: full</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-location: left</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co">    self-contained: true</span></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co">    fig-align: center</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="fu">## Microbial Catalogs</span></span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="al">![](https://media.springernature.com/full/springer-static/image/art%253A10.1038%252Fs41587-020-0603-3/MediaObjects/41587_2020_603_Fig1_HTML.png?as=webp)</span></span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>Recent advances</span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="fu">## Running Code</span></span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:</span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="dv">1</span> <span class="sc">+</span> <span class="dv">1</span></span>
-<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>You can add options to executable code like this</span>
-<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
-<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a><span class="dv">2</span> <span class="sc">*</span> <span class="dv">2</span></span>
-<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>The <span class="in">`echo: false`</span> option disables the printing of code (only output is displayed).</span>
+<div class="sourceCode" id="cb6" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> &quot;Protein Catalog Curation&quot;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="an">editor:</span><span class="co"> visual</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> &quot;Joe Boktor&quot;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> &#39;2023-01-24&#39;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="an">eval:</span><span class="co"> false</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span><span class="co"> </span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="co">    font-family: helvetica neueu</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="co">    page-layout: full</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-location: left</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co">    self-contained: true</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="co">    fig-align: center</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="fu">## Genome / Protein Catalogs</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>| Catalog                                                            | Release | Domain(s)                         | Samples                            | Genomes            | Proteins       | DOI                                                                                        | catalog                                                                                                   |</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>+====================================================================+=========+===================================+====================================+====================+================+============================================================================================+===========================================================================================================+</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>| **UHGG/UHGP**                                                      | 2022    | Bacteria                          | 25,088 + cultured genome resources | 289,232            | <span class="sc">\&gt;</span>170 million  | <span class="co">[</span><span class="ot">link</span><span class="co">](https://www.nature.com/articles/s41587-020-0603-3)</span>                                  | <span class="co">[</span><span class="ot">link</span><span class="co">](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/)</span>                  |</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>| Mgnify Unified Human Gastrointestinal Genomes/Proteins v2.0.1      |         | Archaeal                          |                                    |                    |                | <span class="co">[</span><span class="ot">link</span><span class="co">](https://www.nature.com/articles/s41591-019-0559-3)</span>                                  |                                                                                                           |</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>| **HRGM-KIJ**                                                       | 2021    | Bacteria                          | 845                                | 232,098            | <span class="sc">\&gt;</span>103 million  | <span class="co">[</span><span class="ot">link</span><span class="co">](https://genomemedicine.biomedcentral.com/articles/10.1186/s13073-021-00950-7)</span>       | <span class="co">[</span><span class="ot">link</span><span class="co">](https://www.mbiomenet.org/HRGM/listdir.php?directory=data/protein_catalog)</span>                         |</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>| Human Reference Gut Microbiome (Korea, India, Japan)               |         | Archaeal                          |                                    | (includes UHGG v1) |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>| **ELGG/ELGP**                                                      | 2022    | Bacteria                          | 32,277                             | 6122               | <span class="sc">\&gt;</span>80 million   | <span class="co">[</span><span class="ot">link</span><span class="co">](https://www.nature.com/articles/s41467-022-32805-z)</span>                                 | <span class="co">[</span><span class="ot">link</span><span class="co">](https://zenodo.org/record/6969520/files/ELGP_95.faa.gz)</span>                                            |</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>| Early-Life Gut Genomes/Proteins                                    |         | Archaeal                          |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>| **HADZA**                                                          | 2022    | Bacteria                          | 351                                | 94,971             |                | link                                                                                       | link                                                                                                      |</span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>| African Hadza tribe and comparative Nepali, and California samples |         | Archaeal,                         |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>|                                                                    |         | Bacteriophages                    |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>|                                                                    |         | Eukaryotes,                       |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>| **RUMMETA**                                                        | 2021    | Bacteria                          | 370                                | 10,373             | <span class="sc">\&gt;</span> 154 million | <span class="co">[</span><span class="ot">link</span><span class="co">](http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz)</span> | <span class="co">[</span><span class="ot">link</span><span class="co">](https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x#MOESM5)</span>            |</span>
+<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a>| 10 GIT regions of seven ruminant species                           |         | Archaeal                          |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>|                                                                    |         | (maybe some virus and eukaryotes) |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>| **RUGs**                                                           | 2019    | Bacteria                          | 207                                | 5588               | TBD            | <span class="co">[</span><span class="ot">link</span><span class="co">](https://www.nature.com/articles/s41587-019-0202-3)</span>                                  | <span class="co">[</span><span class="ot">link</span><span class="co">](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/cow-rumen/v1.0/protein_catalogue/)</span>  |</span>
+<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                           |</span>
+<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>| MGnify Cow Rumen v1.0                                              |         | Archaeal                          |                                    |                    |                | <span class="co">[</span><span class="ot">link</span><span class="co">](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02144-7)</span>        |                                                                                                           |</span>
+<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                      |</span>
+<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                      |</span>
+<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                      |</span>
+<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a>|                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                      |</span>
+<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a>+--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+</span>
+<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a>Downloading protein catalogs</span>
+<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-66"><a href="#cb6-66" aria-hidden="true" tabindex="-1"></a>Analysis Setup</span>
+<span id="cb6-67"><a href="#cb6-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-70"><a href="#cb6-70" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-71"><a href="#cb6-71" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb6-72"><a href="#cb6-72" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(reticulate)</span>
+<span id="cb6-73"><a href="#cb6-73" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(magrittr)</span>
+<span id="cb6-74"><a href="#cb6-74" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glue)</span>
+<span id="cb6-75"><a href="#cb6-75" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(seqinr)</span>
+<span id="cb6-76"><a href="#cb6-76" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(future)</span>
+<span id="cb6-77"><a href="#cb6-77" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(future.batchtools)</span>
+<span id="cb6-78"><a href="#cb6-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-79"><a href="#cb6-79" aria-hidden="true" tabindex="-1"></a>tmpdir <span class="ot">&lt;-</span> <span class="st">&quot;/central/scratch/jbok/tmp&quot;</span></span>
+<span id="cb6-80"><a href="#cb6-80" aria-hidden="true" tabindex="-1"></a>homedir <span class="ot">&lt;-</span> <span class="st">&quot;/central/groups/MazmanianLab/joeB&quot;</span></span>
+<span id="cb6-81"><a href="#cb6-81" aria-hidden="true" tabindex="-1"></a>wkdir <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb6-82"><a href="#cb6-82" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;{homedir}/&quot;</span>,</span>
+<span id="cb6-83"><a href="#cb6-83" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Microbiota-Immunomodulation/Microbiota-Immunomodulation&quot;</span></span>
+<span id="cb6-84"><a href="#cb6-84" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-85"><a href="#cb6-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-86"><a href="#cb6-86" aria-hidden="true" tabindex="-1"></a>src_dir <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">&quot;{wkdir}/notebooks&quot;</span>)</span>
+<span id="cb6-87"><a href="#cb6-87" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">glue</span>(<span class="st">&quot;{src_dir}/R-scripts/helpers_general.R&quot;</span>))</span>
+<span id="cb6-88"><a href="#cb6-88" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">glue</span>(<span class="st">&quot;{src_dir}/R-scripts/helpers_sequence-screens.R&quot;</span>))</span>
+<span id="cb6-89"><a href="#cb6-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-90"><a href="#cb6-90" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-91"><a href="#cb6-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-92"><a href="#cb6-92" aria-hidden="true" tabindex="-1"></a><span class="fu">### UHGP v 2.0</span></span>
+<span id="cb6-93"><a href="#cb6-93" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-94"><a href="#cb6-94" aria-hidden="true" tabindex="-1"></a><span class="in">```{r, eval = FALSE}</span></span>
+<span id="cb6-95"><a href="#cb6-95" aria-hidden="true" tabindex="-1"></a>uhgp_ftp_links <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb6-96"><a href="#cb6-96" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-90.tar.gz&quot;</span>,</span>
+<span id="cb6-97"><a href="#cb6-97" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-95.tar.gz&quot;</span>,</span>
+<span id="cb6-98"><a href="#cb6-98" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-100.tar.gz&quot;</span>,</span>
+<span id="cb6-99"><a href="#cb6-99" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-50.tar.gz&quot;</span></span>
+<span id="cb6-100"><a href="#cb6-100" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-101"><a href="#cb6-101" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-102"><a href="#cb6-102" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(fs)</span>
+<span id="cb6-103"><a href="#cb6-103" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (f <span class="cf">in</span> uhgp_ftp_links) {</span>
+<span id="cb6-104"><a href="#cb6-104" aria-hidden="true" tabindex="-1"></a>  jname <span class="ot">&lt;-</span> fs<span class="sc">::</span><span class="fu">path_ext_remove</span>(<span class="fu">basename</span>(f))</span>
+<span id="cb6-105"><a href="#cb6-105" aria-hidden="true" tabindex="-1"></a>  <span class="fu">wget_download_slurm</span>(</span>
+<span id="cb6-106"><a href="#cb6-106" aria-hidden="true" tabindex="-1"></a>    <span class="at">jobname =</span> jname,</span>
+<span id="cb6-107"><a href="#cb6-107" aria-hidden="true" tabindex="-1"></a>    <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span>,</span>
+<span id="cb6-108"><a href="#cb6-108" aria-hidden="true" tabindex="-1"></a>    <span class="at">download_link =</span> f</span>
+<span id="cb6-109"><a href="#cb6-109" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb6-110"><a href="#cb6-110" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-111"><a href="#cb6-111" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-112"><a href="#cb6-112" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-113"><a href="#cb6-113" aria-hidden="true" tabindex="-1"></a><span class="fu">#### ELGG</span></span>
+<span id="cb6-114"><a href="#cb6-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-115"><a href="#cb6-115" aria-hidden="true" tabindex="-1"></a><span class="in">```{r, eval = FALSE}</span></span>
+<span id="cb6-116"><a href="#cb6-116" aria-hidden="true" tabindex="-1"></a><span class="co"># Download 95% ELGG protein faa via https://zenodo.org/record/6969520/files/ELGP_95.faa.gz?download=1</span></span>
+<span id="cb6-117"><a href="#cb6-117" aria-hidden="true" tabindex="-1"></a><span class="co"># wget https://zenodo.org/record/6969520/files/ELGP_95.faa.gz </span></span>
+<span id="cb6-118"><a href="#cb6-118" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb6-119"><a href="#cb6-119" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;ELGG&quot;</span>,</span>
+<span id="cb6-120"><a href="#cb6-120" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;https://zenodo.org/record/6969520/files/ELGP_95.faa.gz&quot;</span>,</span>
+<span id="cb6-121"><a href="#cb6-121" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb6-122"><a href="#cb6-122" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb6-123"><a href="#cb6-123" aria-hidden="true" tabindex="-1"></a><span class="fu">shell_do</span>(<span class="st">&quot;gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz&quot;</span>)</span>
+<span id="cb6-124"><a href="#cb6-124" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-125"><a href="#cb6-125" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-126"><a href="#cb6-126" aria-hidden="true" tabindex="-1"></a><span class="fu">#### KIJ</span></span>
+<span id="cb6-127"><a href="#cb6-127" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-128"><a href="#cb6-128" aria-hidden="true" tabindex="-1"></a><span class="in">```{r, eval = FALSE}</span></span>
+<span id="cb6-129"><a href="#cb6-129" aria-hidden="true" tabindex="-1"></a><span class="co"># HRGM (KIJ 100 only) using 110 India, 645 Japan, and 90 Korean fecal samples</span></span>
+<span id="cb6-130"><a href="#cb6-130" aria-hidden="true" tabindex="-1"></a><span class="co"># https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz</span></span>
+<span id="cb6-131"><a href="#cb6-131" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb6-132"><a href="#cb6-132" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;HRGM_KIJ100&quot;</span>,</span>
+<span id="cb6-133"><a href="#cb6-133" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz&quot;</span>,</span>
+<span id="cb6-134"><a href="#cb6-134" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb6-135"><a href="#cb6-135" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-136"><a href="#cb6-136" aria-hidden="true" tabindex="-1"></a><span class="fu">shell_do</span>(<span class="st">&quot;gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz&quot;</span>)</span>
+<span id="cb6-137"><a href="#cb6-137" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-138"><a href="#cb6-138" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-139"><a href="#cb6-139" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-140"><a href="#cb6-140" aria-hidden="true" tabindex="-1"></a><span class="fu">#### HADZA / NEPALI</span></span>
+<span id="cb6-141"><a href="#cb6-141" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-144"><a href="#cb6-144" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-145"><a href="#cb6-145" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-146"><a href="#cb6-146" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-147"><a href="#cb6-147" aria-hidden="true" tabindex="-1"></a><span class="fu">#### RUMMETA</span></span>
+<span id="cb6-148"><a href="#cb6-148" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-149"><a href="#cb6-149" aria-hidden="true" tabindex="-1"></a>Ruminants</span>
+<span id="cb6-150"><a href="#cb6-150" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-151"><a href="#cb6-151" aria-hidden="true" tabindex="-1"></a><span class="in">```{r, eval = FALSE}</span></span>
+<span id="cb6-152"><a href="#cb6-152" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x </span></span>
+<span id="cb6-153"><a href="#cb6-153" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; An integrated gene catalog and over 10,000 metagenome-assembled genomes </span></span>
+<span id="cb6-154"><a href="#cb6-154" aria-hidden="true" tabindex="-1"></a><span class="co">#&#39; from the gastrointestinal microbiome of ruminants</span></span>
+<span id="cb6-155"><a href="#cb6-155" aria-hidden="true" tabindex="-1"></a><span class="co"># http://rummeta.njau.edu.cn/rumment/download/downloadFile?file=RGMGC.geneSet.faa.gz</span></span>
+<span id="cb6-156"><a href="#cb6-156" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-157"><a href="#cb6-157" aria-hidden="true" tabindex="-1"></a><span class="fu">wget_download_slurm</span>(</span>
+<span id="cb6-158"><a href="#cb6-158" aria-hidden="true" tabindex="-1"></a>  <span class="at">jobname =</span> <span class="st">&quot;RUMMETA&quot;</span>,</span>
+<span id="cb6-159"><a href="#cb6-159" aria-hidden="true" tabindex="-1"></a>  <span class="at">download_link =</span> <span class="st">&quot;http://rummeta.njau.edu.cn/rumment/download/RGMGC.geneSet.faa.gz&quot;</span>, </span>
+<span id="cb6-160"><a href="#cb6-160" aria-hidden="true" tabindex="-1"></a>  <span class="at">slurm_out =</span> <span class="st">&quot;/central/scratch/jbok/slurmdump/&quot;</span></span>
+<span id="cb6-161"><a href="#cb6-161" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb6-162"><a href="#cb6-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-163"><a href="#cb6-163" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-164"><a href="#cb6-164" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-165"><a href="#cb6-165" aria-hidden="true" tabindex="-1"></a><span class="fu">#### RUMMETA</span></span>
+<span id="cb6-166"><a href="#cb6-166" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-169"><a href="#cb6-169" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-170"><a href="#cb6-170" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-171"><a href="#cb6-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-172"><a href="#cb6-172" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Parasitic Databases</span></span>
+<span id="cb6-173"><a href="#cb6-173" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-176"><a href="#cb6-176" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-177"><a href="#cb6-177" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-178"><a href="#cb6-178" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-179"><a href="#cb6-179" aria-hidden="true" tabindex="-1"></a><span class="fu">## Catalog Assembly</span></span>
+<span id="cb6-180"><a href="#cb6-180" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-181"><a href="#cb6-181" aria-hidden="true" tabindex="-1"></a>Visualized shared and distinct proteins for each db</span>
+<span id="cb6-182"><a href="#cb6-182" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-185"><a href="#cb6-185" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-186"><a href="#cb6-186" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb6-187"><a href="#cb6-187" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-188"><a href="#cb6-188" aria-hidden="true" tabindex="-1"></a>Emebed proteins in ESM2 and display low dimensional representation and functional annotation</span>
+<span id="cb6-189"><a href="#cb6-189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-192"><a href="#cb6-192" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb6-193"><a href="#cb6-193" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
