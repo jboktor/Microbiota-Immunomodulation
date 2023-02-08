@@ -55,7 +55,7 @@ load_rds_files <- function(input_files) {
 wget_download_slurm <- function(jobname,
                                 download_link,
                                 slurm_out,
-                                output_dir = /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/) {
+                                output_dir) {
     shell_do(
       glue(
         "sbatch",
