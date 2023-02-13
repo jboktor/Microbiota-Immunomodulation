@@ -19,37 +19,53 @@ format:
 
 ## Genome / Protein Catalogs
 
-## Prokaryotes (Bacteria and Archaea)
+#### **Unified Human Gastrointestinal Genome (UHGG/UHGP)**
 
-#### UHGG -
+"Comprehensive, high-quality reference genomes are required for functional characterization and taxonomic assignment of the human gut microbiota. We present the Unified Human Gastrointestinal Genome (UHGG) collection, comprising 204,938 nonredundant genomes from 4,644 gut prokaryotes. These genomes encode >170 million protein sequences, which we collated in the Unified Human Gastrointestinal Protein (UHGP) catalog. The UHGP more than doubles the number of gut proteins in comparison to those present in the Integrated Gene Catalog. More than 70% of the UHGG species lack cultured representatives, and 40% of the UHGP lack functional annotations. Intraspecies genomic variation analyses revealed a large reservoir of accessory genes and single-nucleotide variants, many of which are specific to individual human populations. The UHGG and UHGP collections will enable studies linking genotypes to phenotypes in the human gut microbiome."
 
--   
 
-#### **HRGM-KIJ**
+#### **Human Reference Gut Microbiome - Korean, India, Japanese datasets (HRGM-KIJ)**
 
--   
+We assembled genomes using public whole-metagenomic shotgun sequencing (WMS) data for 110 and 645 fecal samples from India and Japan, respectively. In addition, we assembled genomes from newly generated WMS data for 90 fecal samples collected from Korea. Expecting genome assembly for low-abundance species may require a much deeper sequencing than that usually employed, so we performed ultra-deep WMS (> 30 Gbp or > 100 million read pairs) for the fecal samples from Korea. We consequently assembled 29,082 prokaryotic genomes from 845 fecal metagenomes for the three under-represented Asian countries and combined them with the Unified Human Gastrointestinal Genome (UHGG) to generate an expanded catalog, the Human Reference Gut Microbiome (HRGM). HRGM contains 232,098 non-redundant genomes for 5414 representative prokaryotic species including 780 that are novel, > 103 million unique proteins, and > 274 million single-nucleotide variants. This is an over 10% increase from the UHGG.
 
-#### **ELGG**
+#### **Early-Life Gut Genomes (ELGG)**
 
--   
+Age-specific reference genomes of the human gut microbiome can provide higher resolution for metagenomic analyses including taxonomic classification, strain-level genomic investigation and functional characterization. We present the Early-Life Gut Genomes (ELGG) catalog with 32,277 genomes representing 2172 species from 6122 fecal metagenomes collected from children under 3 years old spanning delivery mode, gestational age, feeding pattern, and geography. The ELGG substantially expanded the phylogenetic diversity by 38% over the isolate microbial genomes, and the genomic landscape of the early-life microbiome by increasing recruitment of metagenomic reads to 82.8%. More than 60% of the ELGG species lack an isolate representative. The conspecific genomes of the most abundant species from children differed in gene diversity and functions compared to adults. The ELGG genomes encode over 80 million protein sequences, forming the Early-Life Gut Proteins (ELGP) catalog with over four million protein clusters, 29.5% of which lacked functional annotations. The ELGG and ELGP references provided new insights into the early-life human gut microbiome and will facilitate studies to understand the development and mechanisms of disturbances of the human gut microbiome in early life.
 
 #### **HADZA**
 
--   
+The gut microbiome is a key modulator of immune and metabolic health. Human microbiome data is biased towards industrialized populations, providing limited understanding of the distinct and diverse non-industrialized microbiomes. Here, we performed ultra-deep metagenomic sequencing and strain cultivation on 351 fecal samples from the Hadza, hunter-gatherers in Tanzania, and comparative populations in Nepal and California. We recover 94,971 total genomes of bacteria, archaea, bacteriophages, and eukaryotes, 43% of which are absent from existing unified datasets. Analysis of in situ growth rates, genetic pN/pS signatures, high-resolution strain tracking, and 124 gut-resident species vanishing in industrialized populations reveals differentiating dynamics of the Hadza gut microbiome. Industrialized gut microbes are enriched in genes associated with oxidative stress, possibly a result of microbiome adaptation to inflammatory processes. This unparalleled view of the Hadza gut microbiome provides a valuable resource that expands our understanding of microbes capable of colonizing the human gut and clarifies the extensive perturbation brought on by the industrialized lifestyle   
 
-#### WEIS
-
--   
+"Many genomes recovered from the Hadza come from species that are absent from the Unified Human Gastrointestinal Genome (UHGG) database (Almeida et al., 2020), the Genome Taxonomy Database (GTDB) (Parks et al., 2022) (Fig. 2A), and the Metagenomic Gut Virus (MGV) catalog (Nayfach et al., 2021b) (Fig. 2B). MAGs recovered from the Hadza expand the Unified Human Gastrointestinal Genome (UHGG, v1) database (Almeida et al., 2020) bacterial and archaeal species count by 25.4% and 14.3%, respectively, and the Metagenomic Gut Virus (MGV) catalog (Nayfach et al., 2021b) viral species count by 23.7%. The majority of eukaryotic genomes recovered from the Hadza are from the genus Blastocystis (n=10), a prevalent member of the mammalian gut microbiota (Clark et al., 2013). Of the 7 other eukaryotic genomes recovered from the Hadza gut, one is a remarkably large and complete genome of a stingless bee (232 megabase pairs and 92.3% complete), the honey and larvae of which are known to be consumed by the Hadza (Marlowe et al., 2014), and four are novel Amoebae (n=2) and Trepomonas (n=2) genomes (Fig. 2C). While a comprehensive genome database does not yet exist for eukaryotes known to colonize the human gut, genomes from these species are not present in NCBI GenBank (a repository of genomes sequenced from all environments) (NCBI Resource Coordinators, 2017). Finally, over half (59.7%) of the 6.6 million protein families (clustered at 95% amino acid identity) found in Hadza gut microbes are absent from the UHGP-95 protein database (Almeida et al., 2020), a collection of all proteins from genomes in UHGG (Fig. 2D). Together these data highlight the exceptional species- and gene-level novelty elucidated by deep sequencing within this single study.""
+   
 
 #### **RUMMETA**
 
--   
+Our analyses reconstructed a GIT microbial reference catalog with > 154 million nonredundant genes and identified 8745 uncultured candidate species from over 10,000 metagenome-assembled genomes. The integrated gene catalog across the GIT regions demonstrates spatial associations between the microbiome and physiological adaptations, and 8745 newly characterized genomes substantially expand the genomic landscape of ruminant microbiota, particularly those from the lower gut. This substantially expands the previously known set of endogenous microbial diversity and the taxonomic classification rate of the GIT microbiome. These candidate species encode hundreds of enzymes and novel biosynthetic gene clusters that improve our understanding concerning methane production and feed efficiency in ruminants. Overall, this study expands the characterization of the ruminant GIT microbiota at unprecedented spatial resolution and offers clues for improving ruminant livestock production in the future.
 
-#### **RUGs**
+#### **Rumen-Uncultured Genomes (RUGs)**
 
--   
+Ruminants provide essential nutrition for billions of people worldwide. The rumen is a specialized stomach that is adapted to the breakdown of plant-derived complex polysaccharides. The genomes of the rumen microbiota encode thousands of enzymes adapted to digestion of the plant matter that dominates the ruminant diet. We assembled 4,941 rumen microbial metagenome-assembled genomes (MAGs) using approximately 6.5 terabases of short- and long-read sequence data from 283 ruminant cattle. We present a genome-resolved metagenomics workflow that enabled assembly of bacterial and archaeal genomes that were at least 80% complete. Of note, we obtained three single-contig, whole-chromosome assemblies of rumen bacteria, two of which represent previously unknown rumen species, assembled from long-read data. Using our rumen genome collection we predicted and annotated a large set of rumen proteins. Our set of rumen MAGs increases the rate of mapping of rumen metagenomic sequencing reads from 15% to 50–70%. These genomic and protein resources will enable a better understanding of the structure and functions of the rumen microbiota.
+   
 
-Eukaryotic
+#### **EuPathDB**
+
+EuPathDB is a database representing more than 250 eukaryotic microorganisms [23], including both known pathogens and other closely related non-infectious eukaryotic species. Because no eukaryotic pathogen has yet been completely sequenced, this resource comprises primarily draft genomes at varying degrees of completeness, some of which have had little curation since their initial sequencing. However, EuPathDB is more comprehensive than the RefSeq database, containing more than 150 genomes that are absent from the RefSeq protozoa and fungi databases (see Table 2).
+
+
+#### **MGV**
+https://www.nature.com/articles/s41564-021-00928-6#Sec2 
+Metagenomic Gut Virus Catalog
+#### mgv_proteins.faa
+* 11,837,198 proteins identified from the 189,680 viral genomes using Progigal -p meta
+
+#### **WormBase**
+Total: 210 genomes, representing 169 distinct species.
+includes some common gut parasites of mammals 
+
+
+
+
 
 +--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
 | Catalog                                                            | Release | Domain(s)                         | Samples                            | Genomes            | Proteins       | DOI                                                                                        | catalog                                                                                                  |
@@ -66,7 +82,7 @@ Eukaryotic
 |                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
 | Early-Life Gut Genomes/Proteins                                    |         | Archaeal                          |                                    |                    |                |                                                                                            |                                                                                                          |
 +--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
-| **HADZA**                                                          | 2022    | Bacteria                          | 351                                | 94,971             |                | link                                                                                       | [link](https://www.biorxiv.org/content/10.1101/2022.03.30.486478v2.full)                                 |
+| **HADZA**                                                          | 2022    | Bacteria                          | 388                                | 94,971             |                | link                                                                                       | [link](https://www.biorxiv.org/content/10.1101/2022.03.30.486478v2.full)                                 |
 |                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
 | African Hadza tribe and comparative Nepali, and California samples |         | Archaeal,                         |                                    |                    |                |                                                                                            |                                                                                                          |
 |                                                                    |         |                                   |                                    |                    |                |                                                                                            |                                                                                                          |
@@ -93,13 +109,7 @@ Eukaryotic
 |                                                                    |         |                                   |                                    |                    |                | link                                                                                       | link                                                                                                     |
 +--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
 
-## Eukaryotic-Host Parasites (Eukaryotes, Fungi, Protozoa)
-
-https://veupathdb.org/veupathdb/app/downloads/Current_Release/
-
-## Viral Data
-
-Downloading protein catalogs
+## Downloading and Formatting
 
 Analysis Setup
 
@@ -111,6 +121,10 @@ library(glue)
 library(seqinr)
 library(future)
 library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
 
 tmpdir <- "/central/scratch/jbok/tmp"
 homedir <- "/central/groups/MazmanianLab/joeB"
@@ -121,20 +135,19 @@ wkdir <- glue(
 src_dir <- glue("{wkdir}/notebooks")
 source(glue("{src_dir}/R-scripts/helpers_general.R"))
 source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
-protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs/")
+protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs")
 ```
 
-### UHGP v 2.0
+#### UHGP v 2.0
 
 ```{r, eval = FALSE}
-uhgp_ftp_links <- c(
-  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-90.tar.gz",
-  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-95.tar.gz",
-  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-100.tar.gz",
-  "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/protein_catalogue/uhgp-50.tar.gz"
-)
+uhgp_ftp_links <- 
+  paste0(
+    "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/",
+    "human-gut/v2.0.1/protein_catalogue/uhgp-", 
+    c(100, 95, 90, 50), ".tar.gz"
+  )
 
-library(fs)
 for (f in uhgp_ftp_links) {
   jname <- fs::path_ext_remove(basename(f))
   wget_download_slurm(
@@ -144,7 +157,20 @@ for (f in uhgp_ftp_links) {
     output_dir = protein_catalogs
   )
 }
+
 ```
+
+```{r, eval=FALSE}
+# Unzip uhgp-100.tar.gz
+slurm_shell_do(
+  cmd = glue("tar -xvzf {protein_catalogs}/UHGP_v2.0.1/uhgp-95.tar.gz",
+    " -C {protein_catalogs}/UHGP_v2.0.1/"),
+  memory = "200G",
+  walltime = 144000
+)
+
+```
+
 
 #### ELGG
 
@@ -157,7 +183,18 @@ wget_download_slurm(
   slurm_out = "/central/scratch/jbok/slurmdump/",
   output_dir = protein_catalogs
   )
-shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz")
+  
+```
+
+```{r, eval=FALSE}
+# Unzip ELGP_95.faa.gz
+slurm_shell_do(
+  cmd = glue("gunzip {protein_catalogs}/ELGP_95.faa.gz"),
+  memory = "50G",
+  walltime = 36000
+)
+# shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/ELGP_95.faa.gz")
+
 ```
 
 #### KIJ
@@ -171,19 +208,173 @@ wget_download_slurm(
   slurm_out = "/central/scratch/jbok/slurmdump/",
   output_dir = protein_catalogs
 )
-shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz")
 
 ```
 
-#### HADZA / NEPALI
-
-```{r}
+```{r, eval=FALSE}
+# Unzip
+slurm_shell_do(
+  cmd = glue("gunzip {protein_catalogs}/KIJ_CD-HIT-100_Proteins.faa.gz"),
+  memory = "50G",
+  walltime = 36000
+)
+# shell_do("gunzip /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/KIJ_CD-HIT-100_Proteins.faa.gz")
 
 ```
 
-#### RUMMETA
+#### Hadza/Nepali Hunter-Gatherers
 
-Ruminants
+```{r, eval = FALSE}
+# Downloading Hadza Mag metadata
+shell_do(glue(
+  "mkdir -p {wkdir}/data/input/protein_catalog_metadata"
+))
+shell_do(glue(
+  "wget -P {wkdir}/data/input/protein_catalog_metadata/",
+  " https://www.biorxiv.org/content/biorxiv/early/2022/10/07/2022.03.30.486478/DC2/embed/media-2.xlsx",
+))
+shell_do(glue(
+  "mv {wkdir}/data/input/protein_catalog_metadata/media-2.xlsx",
+  " {wkdir}/data/input/protein_catalog_metadata/Hadza-MAG-metadata.xlsx"
+))
+
+```
+
+
+```{r, eval = FALSE}
+hadza_meta_PRJEB49206 <-
+  read.delim(
+    glue(
+      "{wkdir}/data/input/protein_catalog_metadata/",
+      "filereport_analysis_PRJEB49206_tsv.txt"
+    ),
+    stringsAsFactors = FALSE, header = TRUE
+  )
+
+# get list of files that don't currently exist
+hadza_files_unprocessed_lgr <-
+  hadza_meta_PRJEB49206$submitted_ftp %>%
+  purrr::map(~ !(
+    file.exists(glue("{hadza_metagenomes_dir}/{basename(.)}")) |
+      file.exists(glue(
+        "{hadza_metagenomes_dir}/",
+        "{fs::path_ext_remove(basename(.))}"
+      ))
+  ))
+
+hadza_files_unprocessed <- 
+  hadza_meta_PRJEB49206$submitted_ftp %>%
+  keep(unlist(hadza_files_unprocessed_lgr))
+
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = "hadza_agg-download",
+    memory = "1G",
+    ncpus = 2,
+    walltime = 360000
+  )
+)
+
+# Chunk files (100 per job) and download
+tic()
+n_jobs <- ceiling(length(hadza_files_unprocessed) / 100)
+download_runs <- listenv()
+
+for (job in 1:n_jobs) {
+  input_chunk <- chunk_func(hadza_files_unprocessed, n_jobs)[[job]]
+  download_runs[[job]] %<-% wget_path_list(
+    download_list = input_chunk,
+    download_dir = "/central/scratch/jbok/PRJEB49206_HADZA"
+  )
+}
+toc()
+# list.files("/central/scratch/jbok/PRJEB49206_HADZA") %>% length
+
+```
+
+
+```{r, eval = FALSE}
+#______________________________________________________________________
+# Prodigal on Hadza MAGs ----
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = "prodigal-Hadza-MAGs",
+    memory = "5G",
+    ncpus = 1,
+    walltime = 360000
+  )
+)
+
+# select input genome fasta files paths for prodigal
+hadza_proteins_dir <- glue(
+  "{homedir}/Downloads/",
+  "protein_catalogs/hadza_proteins"
+)
+hadza_mag_paths <-
+  list.files(
+    path = "/central/scratch/jbok/PRJEB49206_HADZA",
+    full.names = TRUE
+  )
+hadza_mag_unprocessed_lgr <-
+  hadza_mag_paths %>%
+  purrr::map( ~ !file.exists(glue("{hadza_proteins_dir}/{basename(.)}")))
+
+hadza_mag_paths_to_process <-
+  hadza_mag_paths %>%
+  keep(unlist(hadza_mag_unprocessed_lgr))
+
+# generate list of desired fasta outputs
+hadza_proteins_paths <-
+  purrr::map(
+    hadza_mag_paths_to_process,
+    ~ glue("{hadza_proteins_dir}/{fs::path_ext_remove(basename(.))}")
+  )
+
+# Chunk files (500 per job) and download
+tic()
+n_jobs <- ceiling(length(hadza_mag_paths_to_process) / 25)
+prodigal_runs <- listenv()
+
+for (job in 1:n_jobs) {
+  input_list <- chunk_func(hadza_mag_paths_to_process, n_jobs)[[job]]
+  output_list <- chunk_func(hadza_proteins_paths, n_jobs)[[job]]
+  prodigal_runs[[job]]  %<-% shell_do_prodigal_list(
+    input_genome_list = input_list,
+    output_fasta_list = output_list
+  )
+}
+toc()
+
+hadza_files <- list.files(
+  glue("{protein_catalogs}/hadza_proteins"),
+  full.names = TRUE
+  )
+
+hadza_files %>% length
+```
+
+```{r, eval=FALSE}
+pb <- progress_bar$new(total = length(hadza_files),
+  format = "[:bar] :current/:total (:percent)"
+  )
+
+for (f in hadza_files){
+  pb$tick()
+  shell_do(glue(
+    "cat {f} >> {protein_catalogs}/hadza.fasta"
+    ))
+}
+
+```
+
+
+#### Ruminants - RUMMETA
 
 ```{r, eval = FALSE}
 #' https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x 
@@ -200,45 +391,402 @@ wget_download_slurm(
 
 ```
 
-#### RUGs
+```{r, eval=FALSE}
+slurm_shell_do(
+  cmd = glue("gunzip {protein_catalogs}/RGMGC.geneSet.faa.gz"),
+  memory = "50G",
+  walltime = 36000
+)
+```
 
-```{r}
+#### Ruminants - RUGs
 
+```{r, eval = FALSE}
 rug_ftp_links <- 
   paste0(
     "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/",
     "cow-rumen/v1.0/protein_catalogue/protein_catalogue-", 
     c(100, 95, 90, 50), ".tar.gz")
 
-library(fs)
 for (f in rug_ftp_links) {
   jname <- fs::path_ext_remove(basename(f))
   wget_download_slurm(
     jobname = jname,
     slurm_out = "/central/scratch/jbok/slurmdump/",
     download_link = f,
-    output_dir = protein_catalogs
+    output_dir = glue("{protein_catalogs}/cow-rumen-v1.0")
   )
 }
 
 ```
 
-#### Parasitic Databases
+```{r, eval=FALSE}
+slurm_shell_do(
+  cmd = glue("tar -xvzf {protein_catalogs}/cow-rumen-v1.0/protein_catalogue-95.tar.gz",
+  " -C {protein_catalogs}/cow-rumen-v1.0/"),
+  memory = "50G",
+  walltime = 36000
+)
 
-```{r}
+```
+
+
+#### MGV
+
+```{r, eval = FALSE}
+wget_download_slurm(
+  jobname = "MGV_proteins",
+  download_link = "https://portal.nersc.gov/MGV/MGV_v1.0_2021_07_08/mgv_proteins.faa", 
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  output_dir = protein_catalogs
+  )
+
+```
+
+#### VEuPathDB
+
+```{r, eval = FALSE}
+protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs/")
+VEuPathDB_meta <-
+  read.delim(glue("{wkdir}/data/input/protein_catalog_metadata/VEuPathDB_release-61_2022-12-15.txt"),
+    stringsAsFactors = FALSE, header = TRUE
+  )
+
+# checking length of data
+VEuPathDB_links <- VEuPathDB_meta$protein_fasta_link %>% unique()
+VEuPathDB_links %>% length()
+
+for (f in VEuPathDB_links) {
+  if (!file.exists(glue("{protein_catalogs}/VEuPathDB_v61/{basename(f)}"))){
+    jname <- fs::path_ext_remove(basename(f))
+    wget_download_slurm(
+      jobname = jname,
+      slurm_out = "/central/scratch/jbok/slurmdump/",
+      download_link = f,
+      output_dir = glue("{protein_catalogs}/VEuPathDB_v61")
+    )
+  Sys.sleep(5)
+  }
+}
+
+```
+
+```{r, eval = FALSE}
+# Some runs failed, collect and examine filepaths
+download_failed <- list()
+for (f in VEuPathDB_links) {
+  if (!file.exists(glue("{protein_catalogs}/VEuPathDB_v61/{basename(f)}"))){
+    jname <- fs::path_ext_remove(basename(f))
+    download_failed[[jname]] <- f
+  }
+}
+
+# rerun download failures, downloading genomes (nt) instead of proteins (aa)
+download_failed %<>% purrr::map(
+  ~ gsub("AnnotatedProteins", "Genome", .)
+)
+for (f in download_failed) {
+  if (!file.exists(glue("{protein_catalogs}/VEuPathDB_v61/{basename(f)}"))){
+    jname <- fs::path_ext_remove(basename(f))
+    wget_download_slurm(
+      jobname = jname,
+      slurm_out = "/central/scratch/jbok/slurmdump/",
+      download_link = f,
+      output_dir = glue("{protein_catalogs}/VEuPathDB_v61/Genomes/")
+    )
+  Sys.sleep(1)
+  }
+}
+
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = "prodigal-VEuPathDB-Genomes",
+    memory = "5G",
+    ncpus = 1,
+    walltime = 36000
+  )
+)
+
+VEuPathDB_genome_paths <-
+  list.files(
+    glue("{homedir}/Downloads/protein_catalogs/VEuPathDB_v61/Genomes"),
+    full.names = TRUE
+  )
+
+for (genome_path in VEuPathDB_genome_paths) {
+  output_file_name <- gsub(
+    "Genome", "AnnotatedProteins", basename(genome_path)
+  )
+  output_file <-
+    glue("{homedir}/Downloads/protein_catalogs/VEuPathDB_v61/{output_file_name}")
+  fout %<-% {
+    shell_do_prodigal(
+      input_genome = genome_path,
+      output_fasta = output_file
+    )
+  }
+}
+```
+
+```{r, eval=FALSE}
+# concatenate individual fasta files
+slurm_shell_do(
+  cmd = glue(
+    "cat {protein_catalogs}/VEuPathDB_v61/*.f* >",
+    " {protein_catalogs}/VEuPathDB_v61.fasta"
+  ),
+  memory = "10G"
+)
+
+```
+
+#### WormBase
+```{r, eval = FALSE}
+wormbase_meta <-
+  read.delim(
+    glue(
+      "{wkdir}/data/input/protein_catalog_metadata/",
+      "2023-02-09_WormBase-genomes.txt"
+    ),
+    stringsAsFactors = FALSE, header = TRUE
+  )
+
+for (f in wormbase_meta$Proteins) {
+  jname <- fs::path_ext_remove(basename(f))
+  if (!file.exists(glue("{protein_catalogs}/wormbase-v17.0/{basename(f)}"))){
+    wget_download_slurm(
+      jobname = jname,
+      slurm_out = "/central/scratch/jbok/slurmdump/",
+      download_link = f,
+      output_dir =  glue("{protein_catalogs}/wormbase-v17.0")
+    )
+    Sys.sleep(0.5)
+  }
+}
+```
+
+```{r, eval=FALSE}
+slurm_shell_do(
+  cmd = glue("gunzip {protein_catalogs}/wormbase-v17.0/*.gz"),
+  memory = "5G",
+  walltime = 360000
+)
+
+```
+
+```{r, eval=FALSE}
+# concatenate individual fasta files
+slurm_shell_do(
+  cmd = glue(
+    "cat {protein_catalogs}/wormbase-v17.0/* >",
+    " {protein_catalogs}/wormbase-v17.0.fasta"
+  ),
+  memory = "10G"
+)
 
 ```
 
 ## Catalog Assembly
+Remove redunant sequences within each fasta file
 
-Visualized shared and distinct proteins for each db
+```{r}
+# Utility function for running MMSeq2 clustering on the HPC
+slurm_shell_do_mmseq2_clust <- function(input_fasta,
+                                        output,
+                                        jobname = glue("MMSeq2-{rand_string()}"),
+                                        memory = "32G", # per cpu
+                                        ncpus = 12,
+                                        walltime = 36000,
+                                        tmpdir = "/central/scratch/jbok/tmp",
+                                        working_dir = wkdir) {
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  mmseq_cmd <- glue(
+    "mmseqs easy-linclust --cov-mode 1 -c 0.8",
+    " --kmer-per-seq 200",
+    " --min-seq-id 0.95",
+    " --threads {ncpus}",
+    " {input_fasta}",
+    " {output}",
+    " {tmpdir}"
+  )
+  slurm_shell_do(
+    cmd = mmseq_cmd,
+    jobname = jobname,
+    memory = memory,
+    ncpus = ncpus,
+    walltime = walltime,
+    working_dir = working_dir
+  )
+}
+```
+
+```{r}
+catalog_paths <- list(
+  "UHGP" = glue("{protein_catalogs}/UHGP_v2.0.1/uhgp-95/uhgp-95.faa"),
+  "ELGG" = glue("{protein_catalogs}/ELGP_95.faa"),
+  "KIJ" = glue("{protein_catalogs}/KIJ_CD-HIT-100_Proteins.faa"),
+  "Hadza" = glue("{protein_catalogs}/hadza.fasta"),
+  "RUMMETA" = glue("{protein_catalogs}/RGMGC.geneSet.faa"),
+  "RUGS" = glue("{protein_catalogs}/cow-rumen-v1.0/protein_catalogue-95/protein_catalogue-95.faa"),
+  "MGV" = glue("{protein_catalogs}/mgv_proteins.faa"),
+  "VEuPathDB" = glue("{protein_catalogs}/VEuPathDB_v61.fasta"),
+  "Wormbase" = glue("{protein_catalogs}/wormbase-v17.0.fasta")
+)
+```
+
+ MMSeq2 Clustering of each catalog independently 
+```{r, eval=FALSE}
+for (catalog in names(catalog_paths)) {
+  print(catalog)
+  output_dir <- glue("{protein_catalogs}/clustered_catalogs/{catalog}")
+  shell_do(glue("mkdir -p {output_dir}"))
+  if (file.exists(
+    glue("{output_dir}/{catalog}-MMSeq2-95_rep_seq.fasta")
+  )) {
+    print("already exists ...")
+    next
+  }
+  slurm_shell_do_mmseq2_clust(
+    input_fasta = catalog_paths[[catalog]],
+    output = glue("{output_dir}/{catalog}-MMSeq2-95")
+  )
+}
+
+```
+
+Add a catalog ID to the headers of each fasta file
+```{r, eval=FALSE}
+clustered_rep_paths <-
+  names(catalog_paths) %>%
+  purrr::set_names() %>%
+  purrr::map(
+    ~ glue(
+      "{protein_catalogs}/clustered_catalogs/{.}/",
+      "{.}-MMSeq2-95_rep_seq.fasta"
+    ))
+
+# check that files exist
+# if (!all(purrr::map(clustered_rep_paths, ~ file.exists(.)) %>% unlist )) stop()
+
+clustered_named_rep_paths <- list()
+for (catalog in names(clustered_rep_paths)) {
+  print(catalog)
+  clustered_named_rep_paths[[catalog]] <- glue(
+      "{protein_catalogs}/clustered_catalogs/{catalog}/",
+      "{catalog}-MMSeq2-95_rep_seq_renamed.fasta"
+    )
+  if (file.exists(clustered_named_rep_paths[[catalog]])) {
+    next
+  }
+  message("Annotating: ", catalog)
+  slurm_shell_do(
+    glue(
+      "~/bbmap/bbrename.sh",
+      " in={clustered_rep_paths[[catalog]]}",
+      " out={clustered_named_rep_paths[[catalog]]}",
+      " prefix=CATID_{catalog}",
+      " addprefix=t",
+      " fixjunk=t",
+      " -Xmx100g"
+    ),
+    memory = "100G", 
+    walltime = 36000
+  )
+  Sys.sleep(2)
+}
+
+```
+
+Concatenate each clustered file into a single fasta
+```{r, eval=FALSE}
+shell_do(glue("mkdir -p {protein_catalogs}/clustered_catalogs/merged"))
+for (catalog_path in clustered_named_rep_paths){
+  print(catalog_path)
+  # shell_do(glue(
+  #   "cat {catalog_path} >> {protein_catalogs}/clustered_catalogs/merged/2023-02-13_catalog.fasta"
+  #   ))
+}
+```
+
+Cluster merged catalog fasta
+```{r, eval=FALSE}
+slurm_shell_do_mmseq2_clust(
+  input_fasta = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_catalog.fasta"
+  ),
+  output = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_merged-MMSeq2-95"
+  )
+)
+
+```
+
+
+Chunk protein catalog fasta file into 50 bins
+
+```{r}
+# function to divide original fasta into 10 smaller fasta files, roughly even in size
+chunk_fasta_file <- function(fasta_dir,
+                             fasta_path,
+                             nbins = 50,
+                             working_dir = wkdir) {
+  require(seqinr)
+  require(fs)
+  require(glue)
+  require(purrr)
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  fasta_name <- fs::path_ext_remove(basename(fasta_path))
+  f <- read.fasta(fasta_path)
+  fc <- chunk_func(f, nbins)
+  for (i in 1:length(fc)) {
+    write.fasta(
+      purrr::map(getSequence(fc[[i]]), toupper),
+      getAnnot(fc[[i]]),
+      glue("{fasta_dir}/{fasta_name}_BIN_{i}.fasta")
+    )
+  }
+}
+
+```
+
+```{r}
+
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = "chunk-fasta-catalog",
+    memory = "150G",
+    ncpus = 2,
+    walltime = 36000
+  )
+)
+
+protein_cat_dir <- glue("{homedir}/Downloads/protein_catalogs/tmp_mim_catalog")
+fout %<-% {
+  chunk_fasta_file(
+    protein_cat_dir,
+    glue("{protein_cat_dir}/uhgp-95_v1.fasta")
+  )
+}
+
+```
+
+
 
 ```{r}
 
 ```
 
-Emebed proteins in ESM2 and display low dimensional representation and functional annotation
+Embed proteins in ESM2 and display low dimensional representation and functional annotation
 
 ```{r}
+
 
 ```

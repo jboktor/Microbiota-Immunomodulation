@@ -6,6 +6,8 @@ library(glue)
 library(seqinr)
 library(future)
 library(future.batchtools)
+library(tictoc)
+library(listenv)
 
 tmpdir <- "/central/scratch/jbok/tmp"
 homedir <- "/central/groups/MazmanianLab/joeB"
@@ -18,7 +20,7 @@ src_dir <- glue("{wkdir}/notebooks")
 source(glue("{src_dir}/R-scripts/helpers_general.R"))
 source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
 
-reticulate::use_condaenv(condaenv = "pdmbsR", required = TRUE)
+# reticulate::use_condaenv(condaenv = "pdmbsR", required = TRUE)
 
 
 #______________________________________________________________________________
@@ -27,7 +29,7 @@ library(batchtools)
 blastr <- function(sequences_aa,
                    ensembl_id,
                    db = "refseq_protein",
-                   wkdir = "/central/groups/MazmanianLab/joeB/Microbiota-Immunomodulation/Microbiota-Immunomodulation",
+                   wkdir = wkdir,
                    output_limit = 10000) {
   require(reticulate)
   require(glue)
@@ -76,53 +78,10 @@ submitJobs(jobs,
 
 
 
-#_______________________________________________________________________________
-# Chunking protein catalog fasta files ----
-
-# INITATE FUTURE-SLURM BACKEND FOR PARALLEL PROCESSING
-future::plan(
-  future.batchtools::batchtools_slurm,
-  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
-  resources = list(
-    name = "chunk-fasta-catalog",
-    memory = "50G",
-    ncpus = 2,
-    walltime = 36000
-  )
-)
-
-# divide original fasta into 10 smaller fasta files, roughly even in size
-chunk_fasta_file <- function(fasta_dir,
-                             fasta_path,
-                             working_dir = wkdir) {
-  require(seqinr)
-  require(fs)
-  require(glue)
-  require(purrr)
-  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
-  fasta_name <- fs::path_ext_remove(basename(fasta_path))
-  f <- read.fasta(fasta_path)
-  fc <- chunk_func(f, 10)
-  for (i in 1:length(fc)) {
-    write.fasta(
-      purrr::map(getSequence(fc[[i]]), toupper),
-      getAnnot(fc[[i]]),
-      glue("{fasta_dir}/{fasta_name}_BIN_{i}.fasta")
-    )
-  }
-}
-
-protein_cat_dir <- glue("{homedir}/Downloads/protein_catalogs/tmp_mim_catalog")
-fout %<-% {
-  chunk_fasta_file(
-    protein_cat_dir,
-    glue("{protein_cat_dir}/uhgp-95_v1.fasta")
-  )
-}
 
 
 #______________________________________________________________________________
-# Alignment Algorithums ----
+# Alignment Algorithms ----
 
 keyname_hits <- readRDS(glue("{wkdir}/data/interim/tmp/2023-01-27_gget_proteins-of-interest.rds"))
 protein_catalog_path <- "/central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/tmp_mim_catalog"
@@ -135,13 +94,13 @@ binned_eids <- data.frame(
 )
 
 alignment_df_list <- bind_rows(
-  keyname_hits %>% 
+  keyname_hits %>%
     dplyr::select(ensembl_id, sequences_aa) %>%
     mutate(method = "needle"),
-  keyname_hits %>% 
+  keyname_hits %>%
     dplyr::select(ensembl_id, sequences_aa) %>%
     mutate(method = "water")
-    ) %>% 
+    ) %>%
     full_join(binned_eids, by = "ensembl_id")
 
 alignment_df_list %>% glimpse()
@@ -174,8 +133,8 @@ jobs <- batchMap(
 )
 setJobNames(jobs,
   paste("EMBOSS",
-  alignment_df_list$ensembl_id, 
-  alignment_df_list$method, 
+  alignment_df_list$ensembl_id,
+  alignment_df_list$method,
   sep = "_"),
   reg = breg
 )
@@ -194,7 +153,6 @@ waitForJobs(sleep = 3)
 
 #______________________________________________________________________________
 # Aggregate Alignment Files ----
-
 
 file_dir <- glue("{wkdir}/data/interim/emboss_alignments")
 file_paths <- list.files(file_dir, pattern = "rds$", full.names = TRUE)
@@ -298,28 +256,17 @@ df_aligned_s150 %>%
 
 
 
-# Hadza ----
-# Downloading Hadza Mag metadata
-shell_do(glue(
-  "mkdir -p {wkdir}/data/input/protein_catalog_metadata"
-))
-shell_do(glue(
-  "wget -P {wkdir}/data/input/protein_catalog_metadata/",
-  " https://www.biorxiv.org/content/biorxiv/early/2022/10/07/2022.03.30.486478/DC2/embed/media-2.xlsx",
-))
-shell_do(glue(
-  "mv {wkdir}/data/input/protein_catalog_metadata/media-2.xlsx",
-  " {wkdir}/data/input/protein_catalog_metadata/Hadza-MAG-metadata.xlsx"
-))
-
 # Read in metadata, select accession IDs for MAGs which are contamination and completeion criteria
 #' Consistent with the definition of Medium Quality MAGs in the paper https://www.nature.com/articles/nbt.3893/tables/1
 #' We will filter MAGs with a completion <= 50% and contamination < 10%
 
 # hadza_mag_metadata <-
 
-# hadza_meta <- list()
-hadza_meta <- c("prokaryotes", "viruses", "eukaryotes") %>%
+
+
+hadza_metagenomes_dir <- glue("/central/scratch/jbok/PRJEB49206_HADZA")
+hadza_meta <- 
+  c("prokaryotes", "viruses", "eukaryotes") %>%
   purrr::set_names() %>%
   purrr::map(
   ~ readxl::read_excel(
@@ -338,60 +285,56 @@ hadza_meta$viruses <- hadza_meta$viruses %>%
   filter(checkv_quality != "Low-quality")
 hadza_meta$prokaryotes %>% glimpse()
 
+
+hadza_meta$prokaryotes$assembly_acc %>% unique()  %>% length()
+hadza_meta$prokaryotes$mag_sample_acc %>% unique()  %>% length()
+hadza_meta$prokaryotes$mag_bin_acc %>% unique()  %>% length()
+
 col <- "mag_bin_acc"
 hadza_meta$prokaryotes[[col]] %>% length()
 hadza_meta$prokaryotes[[col]] %>% unique() %>% length()
 
 
 
-# slurm_out <-  glue("{wkdir}/.cluster_runs/{Sys.Date()}_Kraken2_paired_RNASEQ")
-# data_out <- glue("{pdmbs_dir}/workflow/RNASEQ/results/kraken2")
-# dir.create(slurm_out, recursive = TRUE)
-# dir.create(data_out, recursive = TRUE)
+# catalog_paths <- list(
+#   "UHGP" = glue("{protein_catalogs}/UHGP_v2.0.1/uhgp-95/uhgp-95.faa"),
+#   "ELGG" = glue("{protein_catalogs}/ELGP_95.faa"),
+#   "KIJ" = glue("{protein_catalogs}/KIJ_CD-HIT-100_Proteins.faa"),
+#   "Hadza" = glue("{protein_catalogs}/hadza.fasta"),
+#   "RUMMETA" = glue("{protein_catalogs}/RGMGC.geneSet.faa"),
+#   "RUGS" = glue("{protein_catalogs}/cow-rumen-v1.0/protein_catalogue-95/protein_catalogue-95.faa"),
+#   "MGV" = glue("{protein_catalogs}/mgv_proteins.faa"),
+#   "VEuPathDB" = glue("{protein_catalogs}/VEuPathDB_v61.fasta"),
+#   "Wormbase" = glue("{protein_catalogs}/wormbase-v17.0.fasta")
+# )
 
+# slurm_shell_do_mmseq2_clust(
+#   input_fasta = glue("{protein_catalogs}/TEST.fasta"),
+#   output = glue("{protein_catalogs}/clustered_catalogs/TEST/TEST"),
+# )
 
-# for (sampleID in sampleIDs_rna) {
-#   if (!file.exists(
-#     file.path(data_out, glue("UHGG_reports/{sampleID}_UHGG_report.tsv"))
-#   )) {
-#     jobname <- glue("kraken2_{sampleID}")
-#     # pause if there are more than 9,999 slurm jobs submitted
-#     check_slurm_overload()
-#     shell_do(
-#       glue(
-#         "sbatch",
-#         " --job-name={jobname}",
-#         " --output={slurm_out}/{jobname}.out",
-#         " --error={slurm_out}/{jobname}.err",
-#         " notebooks/shell_scripts/kraken2-paired.sh",
-#         " -s {sampleID}",
-#         " -r '/central/groups/MazmanianLab/joeB/PDMBS/workflow/RNASEQ/results/kraken2'",
-#         " -f '/central/groups/MazmanianLab/joeB/PDMBS/workflow/RNASEQ/clean_reads'"
-#       )
-#     )
-#     # to prevent memory alloc issues
-#     Sys.sleep(0.02)
-#   }
-# }
+# mmseqs easy-linclust --cov-mode 1 -c 0.8 \
+# --kmer-per-seq 200 \
+# --min-seq-id 0.95 \
+# --threads 4 TEST.fasta \
+# /central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/clustered_catalogs/TEST/TEST tmp
 
 
 
-# fastq-dl ERZ14760497 ENA
 
 
 
-# enaDataGet -f fastq -d {outdir} {acc}
-
-# enaGroupGet -f submitted SAMEA2591084
-# conda install -c bioconda enabrowsertools
-# conda install -c bioconda fastq-dl
-
-# enaDataGet -f submitted ERR164409
-# enaDataGet -f fasta -d /central/groups/MazmanianLab/joeB/Downloads/scrap ERZ4561419
-# enaDataGet ERZ4561419
-# /central/groups/MazmanianLab/joeB/Downloads/sratoolkit.3.0.1-centos_linux64/bin/fastq-dump ERZ4561419
 
 
 
-# Hadza MAG directory
-# /central/groups/MazmanianLab/joeB/Downloads/mag_library/PRJEB49206_HADZA
+# glue(
+#   "~/bbmap/bbrename.sh",
+#   " in={}",
+#   " out={}_renamed_TEST.fasta",
+#   " prefix=CAT_{catalog}",
+#   " addprefix=t",
+#   " fixjunk=t"
+# )
+
+
+# ~/bbmap/bbrename.sh in=TEST.fasta out=renamed_TEST.fasta prefix=TEST addprefix=t fixjunk=t
