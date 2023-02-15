@@ -76,12 +76,45 @@ submitJobs(jobs,
 # tst %>% glimpse
 
 
+# According 
+
+# Collecting Human Immune proteome data
+IDB_IRIS <-
+  read.delim(
+    glue("{wkdir}/data/input/InnateDB_metadata/",
+    "InnateDB_genes_Immunogenetic-Related-Information-Source.txt"
+    ),
+    stringsAsFactors = FALSE, header = TRUE
+  )
+
+IDB_IRIS %>% colnames()
+IDB_IRIS$ensembl %>% length()
+
+
+gget <- import("gget")
+# proteins_of_interest <- c("interleukin", "interferons", "TGFB", "TNFA")
+keyname_search <- gget$search(IDB_IRIS$ensembl, "homo_sapiens")
+
+keyname_hits <- keyname_search %>% filter(biotype == "protein_coding") %>% 
+  filter(gene_name %in% c("IL1RN", "IL4", "IL6", "IL10", "IL11", "IL13"))
+
+# collect amino acid sequences for each protein using the ensembl_id
+gget_seq <- function(ensembl_id,  amino_acid=TRUE){
+    seq_results <- gget$seq(ensembl_id, translate = amino_acid)
+    return(seq_results[2])
+}
+keyname_hits %<>% mutate(sequences_aa =  map_chr(ensembl_id, gget_seq))
+keyname_hits
+
+saveRDS(keyname_hits, glue("{wkdir}/data/interim/tmp/{Sys.Date()}_gget_proteins-of-interest.rds"))
+
 
 
 
 
 #______________________________________________________________________________
 # Alignment Algorithms ----
+# Obtaining 
 
 keyname_hits <- readRDS(glue("{wkdir}/data/interim/tmp/2023-01-27_gget_proteins-of-interest.rds"))
 protein_catalog_path <- "/central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/tmp_mim_catalog"
@@ -105,6 +138,15 @@ alignment_df_list <- bind_rows(
 
 alignment_df_list %>% glimpse()
 View(alignment_df_list)
+
+
+
+# Selecting 
+
+/central/groups/MazmanianLab/joeB/Downloads/protein_catalogs/clustered_catalogs/merged/2023-02-13_catalog_MMSeq2-95_rep_seq.fasta
+
+
+
 
 
 #______________________________________________________________________________
@@ -321,12 +363,6 @@ hadza_meta$prokaryotes[[col]] %>% unique() %>% length()
 
 
 
-
-
-
-
-
-
 # glue(
 #   "~/bbmap/bbrename.sh",
 #   " in={}",
@@ -338,3 +374,9 @@ hadza_meta$prokaryotes[[col]] %>% unique() %>% length()
 
 
 # ~/bbmap/bbrename.sh in=TEST.fasta out=renamed_TEST.fasta prefix=TEST addprefix=t fixjunk=t
+
+
+
+
+
+

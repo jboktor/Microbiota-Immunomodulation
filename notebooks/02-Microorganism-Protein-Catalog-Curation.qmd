@@ -584,7 +584,7 @@ Remove redunant sequences within each fasta file
 slurm_shell_do_mmseq2_clust <- function(input_fasta,
                                         output,
                                         jobname = glue("MMSeq2-{rand_string()}"),
-                                        memory = "32G", # per cpu
+                                        memory = "120G", # per cpu
                                         ncpus = 12,
                                         walltime = 36000,
                                         tmpdir = "/central/scratch/jbok/tmp",
@@ -634,7 +634,7 @@ for (catalog in names(catalog_paths)) {
   if (file.exists(
     glue("{output_dir}/{catalog}-MMSeq2-95_rep_seq.fasta")
   )) {
-    print("already exists ...")
+    message(catalog, " file already exists ...")
     next
   }
   slurm_shell_do_mmseq2_clust(
@@ -658,22 +658,22 @@ clustered_rep_paths <-
     ))
 
 # check that files exist
-# if (!all(purrr::map(clustered_rep_paths, ~ file.exists(.)) %>% unlist )) stop()
+if (!all(purrr::map(clustered_rep_paths, ~ file.exists(.)) %>% unlist )) stop()
 
 clustered_named_rep_paths <- list()
 for (catalog in names(clustered_rep_paths)) {
-  print(catalog)
   clustered_named_rep_paths[[catalog]] <- glue(
       "{protein_catalogs}/clustered_catalogs/{catalog}/",
       "{catalog}-MMSeq2-95_rep_seq_renamed.fasta"
     )
   if (file.exists(clustered_named_rep_paths[[catalog]])) {
+    message(catalog, " file already exists ...")
     next
   }
   message("Annotating: ", catalog)
   slurm_shell_do(
     glue(
-      "~/bbmap/bbrename.sh",
+      "/home/jboktor/bbmap/bbrename.sh",
       " in={clustered_rep_paths[[catalog]]}",
       " out={clustered_named_rep_paths[[catalog]]}",
       " prefix=CATID_{catalog}",
@@ -693,11 +693,21 @@ Concatenate each clustered file into a single fasta
 
 ```{r, eval=FALSE}
 shell_do(glue("mkdir -p {protein_catalogs}/clustered_catalogs/merged"))
-for (catalog_path in clustered_named_rep_paths){
-  print(catalog_path)
-  # shell_do(glue(
-  #   "cat {catalog_path} >> {protein_catalogs}/clustered_catalogs/merged/2023-02-13_catalog.fasta"
-  #   ))
+
+# check that files exist
+if (!all(purrr::map(
+  clustered_named_rep_paths, ~ file.exists(.)
+  ) %>% unlist )) stop()
+
+for (catalog_path in clustered_named_rep_paths) {
+  message("Merging", catalog_path)
+  # pause execution until previous job is complete
+  check_slurm_overload(njobs = 1, interval = 5)
+  slurm_shell_do(glue(
+    "cat {catalog_path} >> ",
+    "{protein_catalogs}/clustered_catalogs/merged/",
+    "2023-02-13_concatenated-catalog.fasta"
+  ), memory = "50G")
 }
 ```
 
@@ -707,12 +717,14 @@ Cluster merged catalog fasta
 slurm_shell_do_mmseq2_clust(
   input_fasta = glue(
     "{protein_catalogs}/clustered_catalogs/",
-    "merged/2023-02-13_catalog.fasta"
+    "merged/2023-02-13_concatenated-catalog.fasta"
   ),
   output = glue(
     "{protein_catalogs}/clustered_catalogs/",
-    "merged/2023-02-13_merged-MMSeq2-95"
-  )
+    "merged/2023-02-13_catalog_MMSeq2-95"
+  ),
+  memory = "128G",
+  ncpus = 8
 )
 
 ```
@@ -745,28 +757,34 @@ chunk_fasta_file <- function(fasta_dir,
 ```
 
 ```{r}
-
 # Initiate future.batchtools backend for parallel processing
 future::plan(
   future.batchtools::batchtools_slurm,
   template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
   resources = list(
     name = "chunk-fasta-catalog",
-    memory = "150G",
-    ncpus = 2,
-    walltime = 36000
+    memory = "500G",
+    ncpus = 1,
+    walltime = 360000
   )
 )
 
-protein_cat_dir <- glue("{homedir}/Downloads/protein_catalogs/tmp_mim_catalog")
+# protein_cat_dir <- glue("{homedir}/Downloads/protein_catalogs/tmp_mim_catalog")
+protein_cat_dir <- glue("{protein_catalogs}/clustered_catalogs/merged/bins")
+shell_do(glue("mkdir -p {protein_cat_dir}"))
 fout %<-% {
   chunk_fasta_file(
     protein_cat_dir,
-    glue("{protein_cat_dir}/uhgp-95_v1.fasta")
+    glue(
+      "/central/groups/MazmanianLab/joeB/Downloads/protein_catalogs",
+      "/clustered_catalogs/merged/",
+      "2023-02-13_catalog_MMSeq2-95_rep_seq.fasta"
+    )
   )
 }
 
 ```
+<<<<<<< HEAD
 
 ```{r}
 
@@ -778,3 +796,5 @@ Embed proteins in ESM2 and display low dimensional representation and functional
 
 
 ```
+=======
+>>>>>>> 7887d3252e1cca69594f4c2cc982341465d3d5ce
