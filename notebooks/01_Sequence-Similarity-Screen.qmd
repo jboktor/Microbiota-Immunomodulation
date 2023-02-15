@@ -47,7 +47,7 @@ $$\
 
 Here $g$ is the gap penalty and , $s(i,j)$ is the similarity score for a pair of residues, provided by the BLOSUM62 substitution matrix.
 
-## Local Sequence Alignment - Smith-Waterman 
+## Local Sequence Alignment - Smith-Waterman
 
 The Smith-Waterman algorithm is very similar to the Needleman-Wunch approach with the exception that unmatched residues are provided a value of zero in recursive development of the scoring matrix.
 
