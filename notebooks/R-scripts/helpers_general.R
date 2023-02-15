@@ -182,9 +182,9 @@ wait_until <- function(conditional, interval = 2) {
   }
 }
 
-check_slurm_overload <- function(njobs = 9999) {
+check_slurm_overload <- function(njobs = 9999, interval = 2) {
   wait_until(function() {
     count_slurm_jobs() < njobs
-  })
+  }, interval)
 }
 
