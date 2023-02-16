@@ -26,13 +26,6 @@ format:
 
 ## Genome / Protein Catalogs
 
-<<<<<<< HEAD
-#### **Unified Human Gastrointestinal Genome (UHGG/UHGP) v2.0**
-Global catalog of human gut microbiome genomes, representing 31 countries across six continents. Version 2.0 additionally includes the Broad Institute-OpenBiome Microbiome Library, which represents the most comprehensive collection of human gut cultures (Poyet et al. Nature Medicine (2019). This dataset is comprised of 289,232 nonredundant genomes from 4,744 prokaryotic species representatives encoding >170 million protein sequences. More than 70% of the UHGG species lack cultured representatives, and 40% of the UHGP lack functional annotations.
-
-#### **Human Reference Gut Microbiome - Korean, India, Japanese datasets (HRGM-KIJ)**
-Addition to the UHGG v1 adding 845 human gut microbiome samples from under-represented populations. Whole genome assembly was conducted on 90, 110 and 645 fecal samples from Korea, India and Japan, respectively. 
-=======
 #### **Unified Human Gastrointestinal Genome (UHGG/UHGP)**
 
 "Comprehensive, high-quality reference genomes are required for functional characterization and taxonomic assignment of the human gut microbiota. We present the Unified Human Gastrointestinal Genome (UHGG) collection, comprising 204,938 nonredundant genomes from 4,644 gut prokaryotes. These genomes encode \>170 million protein sequences, which we collated in the Unified Human Gastrointestinal Protein (UHGP) catalog. The UHGP more than doubles the number of gut proteins in comparison to those present in the Integrated Gene Catalog. More than 70% of the UHGG species lack cultured representatives, and 40% of the UHGP lack functional annotations. Intraspecies genomic variation analyses revealed a large reservoir of accessory genes and single-nucleotide variants, many of which are specific to individual human populations. The UHGG and UHGP collections will enable studies linking genotypes to phenotypes in the human gut microbiome."
@@ -40,12 +33,10 @@ Addition to the UHGG v1 adding 845 human gut microbiome samples from under-repre
 #### **Human Reference Gut Microbiome - Korean, India, Japanese datasets (HRGM-KIJ)**
 
 We assembled genomes using public whole-metagenomic shotgun sequencing (WMS) data for 110 and 645 fecal samples from India and Japan, respectively. In addition, we assembled genomes from newly generated WMS data for 90 fecal samples collected from Korea. Expecting genome assembly for low-abundance species may require a much deeper sequencing than that usually employed, so we performed ultra-deep WMS (\> 30 Gbp or \> 100 million read pairs) for the fecal samples from Korea. We consequently assembled 29,082 prokaryotic genomes from 845 fecal metagenomes for the three under-represented Asian countries and combined them with the Unified Human Gastrointestinal Genome (UHGG) to generate an expanded catalog, the Human Reference Gut Microbiome (HRGM). HRGM contains 232,098 non-redundant genomes for 5414 representative prokaryotic species including 780 that are novel, \> 103 million unique proteins, and \> 274 million single-nucleotide variants. This is an over 10% increase from the UHGG.
->>>>>>> 7bcaa612483cba9e658793ac815a2e0b5f0a207e
 
 #### **Early-Life Gut Genomes (ELGG)**
 ELGG contains 32,277 genomes representing 2172 species from 6122 fecal metagenomes collected from children under 3 years old spanning delivery mode, gestational age, feeding pattern, and geography. The ELGG substantially expanded the phylogenetic diversity by 38% over the isolate microbial genomes, and the genomic landscape of the early-life microbiome by increasing recruitment of metagenomic reads to 82.8%. More than 60% of the ELGG species lack an isolate representative. The conspecific genomes of the most abundant species from children differed in gene diversity and functions compared to adults. The ELGG genomes encode over 80 million protein sequences, forming the Early-Life Gut Proteins (ELGP) catalog with over four million protein clusters, 29.5% of which lacked functional annotations.
 
-<<<<<<< HEAD
 #### **Hadza**
 Ultra-deep metagenomic sequencing and strain cultivation on 351 fecal samples from the Hadza, hunter-gatherers in Tanzania, and comparative populations in Nepal and California. 
 This data set contains 94,971 genomes of bacteria, archaea, bacteriophages, and eukaryotes, 43% of which are absent from existing unified datasets. 
@@ -56,28 +47,9 @@ A ruminant gastrointestinal microbial reference catalog with 154,335,274 nonredu
 #### **Rumen-Uncultured Genomes (RUGs)**
 4,941 rumen microbial metagenome-assembled genomes (MAGs) using approximately 6.5 terabases of short- and long-read sequence data from 283 ruminant cattle. Our set of rumen MAGs increases the rate of mapping of rumen metagenomic sequencing reads from 15% to 50–70%. These genomic and protein resources will enable a better understanding of the structure and functions of the rumen microbiota.
    
-=======
-Age-specific reference genomes of the human gut microbiome can provide higher resolution for metagenomic analyses including taxonomic classification, strain-level genomic investigation and functional characterization. We present the Early-Life Gut Genomes (ELGG) catalog with 32,277 genomes representing 2172 species from 6122 fecal metagenomes collected from children under 3 years old spanning delivery mode, gestational age, feeding pattern, and geography. The ELGG substantially expanded the phylogenetic diversity by 38% over the isolate microbial genomes, and the genomic landscape of the early-life microbiome by increasing recruitment of metagenomic reads to 82.8%. More than 60% of the ELGG species lack an isolate representative. The conspecific genomes of the most abundant species from children differed in gene diversity and functions compared to adults. The ELGG genomes encode over 80 million protein sequences, forming the Early-Life Gut Proteins (ELGP) catalog with over four million protein clusters, 29.5% of which lacked functional annotations. The ELGG and ELGP references provided new insights into the early-life human gut microbiome and will facilitate studies to understand the development and mechanisms of disturbances of the human gut microbiome in early life.
-
-#### **HADZA**
-
-The gut microbiome is a key modulator of immune and metabolic health. Human microbiome data is biased towards industrialized populations, providing limited understanding of the distinct and diverse non-industrialized microbiomes. Here, we performed ultra-deep metagenomic sequencing and strain cultivation on 351 fecal samples from the Hadza, hunter-gatherers in Tanzania, and comparative populations in Nepal and California. We recover 94,971 total genomes of bacteria, archaea, bacteriophages, and eukaryotes, 43% of which are absent from existing unified datasets. Analysis of in situ growth rates, genetic pN/pS signatures, high-resolution strain tracking, and 124 gut-resident species vanishing in industrialized populations reveals differentiating dynamics of the Hadza gut microbiome. Industrialized gut microbes are enriched in genes associated with oxidative stress, possibly a result of microbiome adaptation to inflammatory processes. This unparalleled view of the Hadza gut microbiome provides a valuable resource that expands our understanding of microbes capable of colonizing the human gut and clarifies the extensive perturbation brought on by the industrialized lifestyle
-
-"Many genomes recovered from the Hadza come from species that are absent from the Unified Human Gastrointestinal Genome (UHGG) database (Almeida et al., 2020), the Genome Taxonomy Database (GTDB) (Parks et al., 2022) (Fig. 2A), and the Metagenomic Gut Virus (MGV) catalog (Nayfach et al., 2021b) (Fig. 2B). MAGs recovered from the Hadza expand the Unified Human Gastrointestinal Genome (UHGG, v1) database (Almeida et al., 2020) bacterial and archaeal species count by 25.4% and 14.3%, respectively, and the Metagenomic Gut Virus (MGV) catalog (Nayfach et al., 2021b) viral species count by 23.7%. The majority of eukaryotic genomes recovered from the Hadza are from the genus Blastocystis (n=10), a prevalent member of the mammalian gut microbiota (Clark et al., 2013). Of the 7 other eukaryotic genomes recovered from the Hadza gut, one is a remarkably large and complete genome of a stingless bee (232 megabase pairs and 92.3% complete), the honey and larvae of which are known to be consumed by the Hadza (Marlowe et al., 2014), and four are novel Amoebae (n=2) and Trepomonas (n=2) genomes (Fig. 2C). While a comprehensive genome database does not yet exist for eukaryotes known to colonize the human gut, genomes from these species are not present in NCBI GenBank (a repository of genomes sequenced from all environments) (NCBI Resource Coordinators, 2017). Finally, over half (59.7%) of the 6.6 million protein families (clustered at 95% amino acid identity) found in Hadza gut microbes are absent from the UHGP-95 protein database (Almeida et al., 2020), a collection of all proteins from genomes in UHGG (Fig. 2D). Together these data highlight the exceptional species- and gene-level novelty elucidated by deep sequencing within this single study.""
-
-#### **RUMMETA**
-
-Our analyses reconstructed a GIT microbial reference catalog with \> 154 million nonredundant genes and identified 8745 uncultured candidate species from over 10,000 metagenome-assembled genomes. The integrated gene catalog across the GIT regions demonstrates spatial associations between the microbiome and physiological adaptations, and 8745 newly characterized genomes substantially expand the genomic landscape of ruminant microbiota, particularly those from the lower gut. This substantially expands the previously known set of endogenous microbial diversity and the taxonomic classification rate of the GIT microbiome. These candidate species encode hundreds of enzymes and novel biosynthetic gene clusters that improve our understanding concerning methane production and feed efficiency in ruminants. Overall, this study expands the characterization of the ruminant GIT microbiota at unprecedented spatial resolution and offers clues for improving ruminant livestock production in the future.
-
-#### **Rumen-Uncultured Genomes (RUGs)**
-
-Ruminants provide essential nutrition for billions of people worldwide. The rumen is a specialized stomach that is adapted to the breakdown of plant-derived complex polysaccharides. The genomes of the rumen microbiota encode thousands of enzymes adapted to digestion of the plant matter that dominates the ruminant diet. We assembled 4,941 rumen microbial metagenome-assembled genomes (MAGs) using approximately 6.5 terabases of short- and long-read sequence data from 283 ruminant cattle. We present a genome-resolved metagenomics workflow that enabled assembly of bacterial and archaeal genomes that were at least 80% complete. Of note, we obtained three single-contig, whole-chromosome assemblies of rumen bacteria, two of which represent previously unknown rumen species, assembled from long-read data. Using our rumen genome collection we predicted and annotated a large set of rumen proteins. Our set of rumen MAGs increases the rate of mapping of rumen metagenomic sequencing reads from 15% to 50--70%. These genomic and protein resources will enable a better understanding of the structure and functions of the rumen microbiota.
-
->>>>>>> 7bcaa612483cba9e658793ac815a2e0b5f0a207e
 #### **EuPathDB**
 https://academic.oup.com/nar/article/41/D1/D684/1059841
 
-<<<<<<< HEAD
 EuPathDB includes 11 databases (AmoebaDB, CryptoDB, FungiDB, GiardiaDB, HostDB, MicrosporidiaDB, OrthoMCLDB, PiroplasmaDB, PlasmoDB, ToxoDB, TrichDB, TriTrypDB, and VectorBase) which together represent 689 eukaryotic microorganisms. This data includes both known pathogens and other closely related non-infectious eukaryotic species.
 
 #### **Metagenomic Gut Virus catalogue (MGV)**
@@ -88,17 +60,6 @@ https://www.nature.com/articles/s41564-021-00928-6#Sec2
 #### **WormBase**
 https://academic.oup.com/nar/article/48/D1/D762/5603222 
 Databases consisting of 210 genomes, representing 169 distinct species from the Nemotoda (Roundworm) and Plathelminthes (Flatworm) phyla.
-=======
-EuPathDB is a database representing more than 250 eukaryotic microorganisms \[23\], including both known pathogens and other closely related non-infectious eukaryotic species. Because no eukaryotic pathogen has yet been completely sequenced, this resource comprises primarily draft genomes at varying degrees of completeness, some of which have had little curation since their initial sequencing. However, EuPathDB is more comprehensive than the RefSeq database, containing more than 150 genomes that are absent from the RefSeq protozoa and fungi databases (see Table 2).
-
-#### **MGV**
-
-https://www.nature.com/articles/s41564-021-00928-6#Sec2 Metagenomic Gut Virus Catalog \#### mgv_proteins.faa \* 11,837,198 proteins identified from the 189,680 viral genomes using Progigal -p meta
-
-#### **WormBase**
-
-Total: 210 genomes, representing 169 distinct species. includes some common gut parasites of mammals
->>>>>>> 7bcaa612483cba9e658793ac815a2e0b5f0a207e
 
 +--------------------------------------------------------------------+---------+-----------------------------------+------------------------------------+--------------------+----------------+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
 | Catalog                                                            | Release | Domain(s)                         | Samples                            | Genomes            | Proteins       | DOI                                                                                        | catalog                                                                                                  |
@@ -204,6 +165,7 @@ slurm_shell_do(
 
 ```
 
+
 #### ELGG
 
 ```{r, eval = FALSE}
@@ -272,6 +234,7 @@ shell_do(glue(
 
 ```
 
+
 ```{r, eval = FALSE}
 hadza_meta_PRJEB49206 <-
   read.delim(
@@ -325,6 +288,7 @@ toc()
 # list.files("/central/scratch/jbok/PRJEB49206_HADZA") %>% length
 
 ```
+
 
 ```{r, eval = FALSE}
 #______________________________________________________________________
@@ -403,6 +367,7 @@ for (f in hadza_files){
 
 ```
 
+
 #### Ruminants - RUMMETA
 
 ```{r, eval = FALSE}
@@ -458,6 +423,7 @@ slurm_shell_do(
 )
 
 ```
+
 
 #### MGV
 
@@ -572,7 +538,6 @@ slurm_shell_do(
 ```
 
 #### WormBase
-
 ```{r, eval = FALSE}
 wormbase_meta <-
   read.delim(
@@ -619,7 +584,6 @@ slurm_shell_do(
 ```
 
 ## Catalog Assembly
-
 Remove redunant sequences within each fasta file
 
 ```{r}
@@ -667,7 +631,6 @@ catalog_paths <- list(
 )
 ```
 
-<<<<<<< HEAD
 Collect summary data for each catalog
 
 ```{r, eval=FALSE}
@@ -686,10 +649,6 @@ for (catalog in names(catalog_paths)) {
 
 
  MMSeq2 Clustering of each catalog independently 
-=======
-MMSeq2 Clustering of each catalog independently
-
->>>>>>> 7bcaa612483cba9e658793ac815a2e0b5f0a207e
 ```{r, eval=FALSE}
 for (catalog in names(catalog_paths)) {
   print(catalog)
@@ -711,7 +670,6 @@ for (catalog in names(catalog_paths)) {
 
 
 Add a catalog ID to the headers of each fasta file
-
 ```{r, eval=FALSE}
 clustered_rep_paths <-
   names(catalog_paths) %>%
@@ -769,7 +727,6 @@ for (catalog in names(clustered_rep_paths)) {
 ```
 
 Concatenate each clustered file into a single fasta
-
 ```{r, eval=FALSE}
 shell_do(glue("mkdir -p {protein_catalogs}/clustered_catalogs/merged"))
 
@@ -791,7 +748,6 @@ for (catalog_path in clustered_named_rep_paths) {
 ```
 
 Cluster merged catalog fasta
-
 ```{r, eval=FALSE}
 slurm_shell_do_mmseq2_clust(
   input_fasta = glue(
@@ -807,6 +763,7 @@ slurm_shell_do_mmseq2_clust(
 )
 
 ```
+
 
 Chunk protein catalog fasta file into 50 bins
 
@@ -872,21 +829,4 @@ slurm_shell_do(
 )
 
 ```
-<<<<<<< HEAD
 
-=======
-<<<<<<< HEAD
-
-```{r}
-
-```
-
-Embed proteins in ESM2 and display low dimensional representation and functional annotation
-
-```{r}
-
-
-```
-=======
->>>>>>> 7887d3252e1cca69594f4c2cc982341465d3d5ce
->>>>>>> 7bcaa612483cba9e658793ac815a2e0b5f0a207e
