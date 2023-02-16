@@ -380,3 +380,11 @@ hadza_meta$prokaryotes[[col]] %>% unique() %>% length()
 
 
 
+# Getting the number of proteins in a fasta file
+# grep -c "^>" fastafile
+
+#' Our 95% similarity file has 164,949,326 representative proteins
+#' 
+
+
+
