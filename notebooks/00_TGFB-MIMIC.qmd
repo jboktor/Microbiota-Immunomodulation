@@ -1,0 +1,213 @@
+---
+title: "An Evolutionarily convergent TGF-𝛽 Mimetic"
+bibliography: references.bib
+editor: visual
+author: "Joe Boktor"
+date: '2023-02-10'
+format: 
+  html:
+    font-family: helvetica neueu
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+## Background
+
+Previous work has shown that an intestinal helminth parasite (*Heligmosomoides polygyrus)* is able to expand host regulatory T-cell populations through activation of TGF-𝛽 receptors[@johnston2017]. Further work went on to identify a protein, *H. polygyrus* TGF-β mimic (*Hp-*TGM), which potently binds host TGF-𝛽 receptors, while containing no sequence-level homology to host TGF-𝛽.
+
+## Objectives
+
+In this notebook, we will compare human TGF-𝛽 to the *H. polygyrus* TGF-β mimic (*Hp-*TGM) *in-silico* using a multi-layered strategy. First, we will compare amino acid sequences between the two proteins searching for both local and global homology. Second, we will fold these two proteins using ESM2 and compare structural motifs. Finally we will employ molecular docking between the two proteins and the human TGF-𝛽 receptor (\_\_\_\_). These analyses will help us determine the comparative value of sequence, structural, and molecular docking based computational approaches when comparing evolutionary convergent protein-receptor binding pairs.
+
+## Analysis
+
+Setup
+
+```{r}
+library(bio3d) 
+library(r3dmol)
+
+# library(tidyverse)
+# library(reticulate)
+# library(magrittr)
+# library(glue)
+# library(seqinr)
+# library(future)
+# library(future.batchtools)
+# library(fs)
+# library(tictoc)
+# library(listenv)
+# library(progress)
+# library(devtools)
+```
+
+### Sequence Similarity (Local & Global)
+
+```{r}
+
+# Insert code chunk for seq alignemtn
+
+```
+
+```{r}
+# Seq alignment figure
+```
+
+### Hidden Markov Model Similarity 
+
+
+### Hidden Markov Model Similarity 
+
+```{r}
+#| warning: false
+
+# load in two pdb files and concatenate with bio3d 
+
+# TGFB Receptor I : 
+pdb_tgfb_r1 <- read.pdb("5e8s")
+# TGFB Receptor II : 
+pdb_tgfb_r2 <- read.pdb("4xjj")
+# TGFB III :
+pdb_tgfb3 <- read.pdb("1tgj")
+# HP-TGM :
+pdb_hptgm <- read.pdb("7sxb")
+
+
+view_bio3d_pdb <- function(mbio3d_pdb) {
+  # Set up the initial viewer
+  r3dmol() %>%
+    # Add model to scene
+    m_add_model(data = m_bio3d(mbio3d_pdb)) %>%
+    # Zoom to encompass the whole scene
+    m_zoom_to() %>%
+    # Set style of structures
+    m_set_style(style = m_style_cartoon(color = "#6E8FF8")) %>%
+    # Set style of specific selection (selecting by secondary)
+    m_set_style(sel = m_sel(ss = "s"),
+                style = m_style_cartoon(color = "#FFD105", arrows = TRUE)) %>%
+    # Style the alpha helix
+    m_set_style(sel = m_sel(ss = "h"), # Style alpha helix
+                style = m_style_cartoon(color = "#FC027E")) %>%
+    # Rotate the scene by given angle on given axis
+    m_rotate(angle = 90, axis = "y") %>%
+    # Animate the scene by spinning it
+    m_spin()
+}
+
+```
+
+::: panel-tabset
+
+#### H. polygyrus TGF-β mimic (Domain 3)
+```{r}
+view_bio3d_pdb(pdb_hptgm)
+```
+
+#### TGF-β III 
+```{r}
+view_bio3d_pdb(pdb_tgfb3)
+```
+
+#### TGF-β Receptor I
+```{r}
+view_bio3d_pdb(pdb_tgfb_r1)
+```
+
+#### TGF-β Receptor II
+```{r}
+view_bio3d_pdb(pdb_tgfb_r2)
+```
+
+:::
+
+
+```{r}
+library(glue)
+receptor_ligand_pairs <- c(
+  "TGFB3_TGFBR1",
+  "TGFB3_TGFBR2",
+  "TGFB3_TGFBR1_TGFBR2",
+  "HP-TGM_TGFBR1",
+  "HP-TGM_TGFBR2",
+  "HP-TGM_TGFBR1_TGFBR2"
+)
+
+pdb_models <- list()
+for (pair in receptor_ligand_pairs) {
+  pdb_data <- bio3d::read.pdb(
+    glue(
+      "~/Downloads/alphafold-multimer/{pair}/{pair}",
+      "/unrelaxed_model_5_multimer_v2_pred_4.pdb"
+    ),
+    multi = TRUE
+  )
+  
+  pdb_models[[pair]] <- r3dmol(
+    viewer_spec = m_viewer_spec(
+      cartoonQuality = 2,
+      lowerZoomLimit = 50,
+      upperZoomLimit = 2000
+    )
+  ) %>%
+    m_add_model(data = m_bio3d(pdb_data)) %>%
+    m_add_surface(style = m_style_surface(opacity = 0.4)) %>%
+    m_set_style(style = m_style_cartoon()) %>%
+    m_set_style(sel = m_sel(chain = "B"),
+                style = m_style_cartoon(color = "#FFD105")) %>%
+    m_set_style(sel = m_sel(chain = "C"),
+                style = m_style_cartoon(color = "#FC027E")) %>% 
+    m_zoom_to() %>% 
+    m_rotate(angle = 90, axis = "y") %>%
+    m_spin()
+  
+}
+
+```
+
+::: panel-tabset
+
+#### [TGF-β3 - TGF-βR1]
+```{r}
+pdb_models$TGFB3_TGFBR1
+```
+
+#### [TGF-β3 - TGF-βR1]
+```{r}
+pdb_models$TGFB3_TGFBR2
+```
+
+#### [TGF-β3 - TGF-βR1 - TGF-βR2]
+```{r}
+pdb_models$TGFB3_TGFBR1_TGFBR2
+```
+
+#### [HP-TGM - TGF-βR1]
+```{r}
+pdb_models$`HP-TGM_TGFBR1`
+```
+
+#### [HP-TGM - TGF-βR2]
+```{r}
+pdb_models$`HP-TGM_TGFBR2`
+```
+
+#### [HP-TGM - TGF-βR1 - TGF-βR2]
+```{r}
+pdb_models$`HP-TGM_TGFBR1_TGFBR2`
+```
+
+:::
+
+
+
+https://www.rcsb.org/structure/1KTZ
+
+#### **Crystal Structure of the Human TGF-beta Type II Receptor Extracellular Domain in Complex with TGF-beta3** 
+
+
