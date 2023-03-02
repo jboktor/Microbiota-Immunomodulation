@@ -1,5 +1,5 @@
 ---
-title: "An Evolutionarily convergent TGF-𝛽 Mimetic"
+title: "An *in-silico* exploration of an evolutionarily convergent TGF-𝛽 mimetic from a parasitic nematode *Heligmosomoides polygyrus bakeri*"
 bibliography: references.bib
 editor: visual
 author: "Joe Boktor"
@@ -30,106 +30,575 @@ In this notebook, we will compare human TGF-𝛽 to the *H. polygyrus* TGF-β mi
 Setup
 
 ```{r}
-library(bio3d) 
-library(r3dmol)
+#| warning: false
 
-# library(tidyverse)
-# library(reticulate)
-# library(magrittr)
-# library(glue)
-# library(seqinr)
-# library(future)
-# library(future.batchtools)
-# library(fs)
-# library(tictoc)
-# library(listenv)
-# library(progress)
-# library(devtools)
+library(tidyverse)
+library(reticulate)
+library(magrittr)
+library(glue)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(viridis)
+library(bio3d)
+library(r3dmol)
+library(strex)
+library(plotly)
+library(ggsci)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R-scripts/helpers_general.R"))
+source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
+source(glue("{src_dir}/R-scripts/rhmmer-package.R"))
+protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs")
+shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/raw/monomers"))
+shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/processed/monomers"))
+shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/processed/complexes"))
+```
+
+
+```{r, eval = FALSE}
+gget_seq <- function(ensembl_id, amino_acid = TRUE) {
+  seq_results <- gget$seq(ensembl_id, translate = amino_acid)
+  return(seq_results[2])
+}
+tgf_keys <- c("TGFB1", "TGFB2", "TGFB3", "TGFBR1", "TGFBR2", "TGFBR3")
+tgfb_search <- gget$search(tgf_keys, "homo_sapiens")
+tgfb_search %<>% filter(biotype == "protein_coding", gene_name %in% tgf_keys)
+# collect amino acid sequences for each protein using the ensembl_id
+tgfb_search %<>% mutate(sequences_aa =  map_chr(ensembl_id, gget_seq))
+
+HP_TMG_SEQ <- "DDSGCMPFSDEAATYKYVAKGPKNIEIPAQIDNSGMYPDYTHVKRFCKGLHGEDTTGWFVGICLASQWYYYEGVQECDDRRCSPLPTNDTVSFEYLKATVNPGIIFNITVHPDASGKYPELTYIKRICKNFPTDSNVQGHIIGMCYNAEWQFSSTPTCPASGCPPLPDDGIVFYEYYGYAGDRHTVGPVVTKDSSGNYPSPTHARRRCRALSQEADPGEFVAICYKSGTTGESHWEYYKNIGKCPDPRCKPLEANESVHYEYFTMTNETDKKKGPPAKVGKSGKYPEHTCVKKVCSKWPYTCSTGGPIFGECIGATWNFTALMECINARGCSSDDLFDKLGFEKVIVRKGEGSDSYKDDFARFYATGSKVIAECGGKTVRLECSNGEWHEPGTKTVHRCTKDGIRTL"
+TGFB1 <- "ALDTNYCFSSTEKNCCVRQLYIDFRKDLGWKWIHEPKGYHANFCLGPCPYIWSLDTQYSKVLALYNQHNPGASAAPCCVPQALEPLPIVYYVGRKPKVEQLSNMIVRSCKCS"
+TGFB2 <- "ALDAAYCFRNVQDNCCLRPLYIDFKRDLGWKWIHEPKGYNANFCAGACPYLWSSDTQHSRVLSLYNTINPEASASPCCVSQDLEPLTILYYIGKTPKIEQLSNMIVKSCKCS"
+TGFB3 <- "ALDTNYCFRNLEENCCVRPLYIDFRQDLGWKWVHEPKGYYANFCSGPCPYLRSADTTHSTVLGLYNTLNPEASASPCCVPQDLEPLTILYYVGRTPKVEQLSNMVVKSCKCS"
+
+hp_mimic_data <-
+  tribble(
+    ~gene_name, ~sequences_aa,
+    "HP-TGM",   HP_TMG_SEQ
+  )
+tgfb_search %<>% bind_rows(hp_mimic_data)
+
+saveRDS(tgfb_search, glue(
+  "{wkdir}/data/interim/tmp/",
+  "{Sys.Date()}_TGFB_gget.rds"
+))
+
+```
+
+Saving individual sequences in FASTA format.
+
+```{r, eval=FALSE}
+
+# Save individual fasta files for each protein -----
+tgfb_search <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-02-27_TGFB_gget.rds"
+))
+
+# Manually editing the fasta sequences to remove the signal peptide and other non-active domains
+tgfb_search %<>% 
+  mutate(sequences_aa = case_when(
+    gene_name == "TGFB1" ~ TGFB1,
+    gene_name == "TGFB2" ~ TGFB2,
+    gene_name == "TGFB3" ~ TGFB3,
+    TRUE ~ sequences_aa  
+  ))
+
+fastas_raw_dir <- glue("{wkdir}/data/interim/fastas/raw/monomers")
+for (tf in tgfb_search$gene_name) {
+  tf_aa <- tgfb_search %>%
+    filter(gene_name == tf) %>%
+    pull(sequences_aa)
+  fasta_path <- glue("{fastas_raw_dir}/{tf}.fasta")
+  write.fasta(
+    sequences = tf_aa,
+    names = tf,
+    file.out = fasta_path,
+    open = "w",
+    nbchar = 60,
+    as.string = FALSE
+  )
+}
+
+```
+
+Applying [SignalP 6.0](https://github.com/fteufel/signalp-6.0) to predict and remove signal peptides from fasta files.
+
+```{r, eval=FALSE}
+
+fastas_raw_paths <- paste0(
+  fastas_raw_dir, "/", 
+  list.files(fastas_raw_dir, pattern = "fasta")
+)
+names(fastas_raw_paths) <- fastas_raw_paths %>% 
+  purrr::map(~fs::path_ext_remove(basename(.)))
+
+fastas_processed_tgfb <- list()
+for (id in names(fastas_raw_paths)) {
+  fasta_path <- fastas_raw_paths[[id]]
+  fastas_processed_tgfb[[id]] <- glue(
+    "{wkdir}/data/interim/fastas/processed/monomers/{id}"
+    )
+  if (dir.exists(fastas_processed_tgfb[[id]])) {
+    next
+  } 
+  message("Processing ", id, " fasta file...")
+  slurm_shell_do(
+    glue(
+      "conda run -n signalp6",
+      " signalp6",
+      " --organism eukarya",
+      " --fastafile {fasta_path}",
+      " --output_dir {fastas_processed_tgfb[[id]]}",
+      " --write_procs 8",
+      " --format all",
+      " --mode fast"
+      ),
+      ncpus = 8
+  )
+}
+
+# IF no signal peptide is found, the fasta file is copied to the processed dir
+for (id in names(fastas_raw_paths)) {
+  raw_fasta <- fastas_raw_paths[[id]]
+  processed_fasta <- glue(
+    "{fastas_processed_tgfb[[id]]}/",
+    "processed_entries.fasta"
+    )
+  if (file.info(processed_fasta)$size == 0){
+    message("Overwriting ", id, " processed fasta file...")
+    shell_do(glue("cp {raw_fasta} {processed_fasta}"))
+  }
+}
+
+```
+
+Saving FASTA files for complex predictions
+```{r, eval=FALSE}
+
+# Saving protein complexes (post-processing) ----
+tgfb_search <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-02-27_TGFB_gget.rds"
+))
+# Split into TFs and Receptors and combine all possible pairs
+tgf_receptors <- tgfb_search %>% 
+  filter(grepl("receptor", ensembl_description)) %>% 
+  pull(gene_name)
+tgf_tf <- tgfb_search %>% 
+  filter(!grepl("receptor", ensembl_description)) %>% 
+  pull(gene_name)
+
+format_seq <- function(fasta) {
+  fasta %>% 
+    seqinr::getSequence() %>% 
+    unlist() %>%
+    paste(collapse = "")
+}
+
+# Saving paired fasta files
+fastas_merged_path <- glue("{wkdir}/data/interim/fastas/processed/complexes")
+for (tf in tgf_tf) {
+  tf_aa <- seqinr::read.fasta(
+      glue("{fastas_processed_tgfb[[tf]]}/processed_entries.fasta"),
+      seqtype = "AA"
+      )
+  for (receptor in tgf_receptors) {
+    rec_aa <- seqinr::read.fasta(
+      glue("{fastas_processed_tgfb[[receptor]]}/processed_entries.fasta"),
+      seqtype = "AA"
+      )
+    merged_name <- paste(
+      seqinr::getName(tf_aa), 
+      seqinr::getName(rec_aa), 
+      sep = "_"
+      )
+    merged_fasta_path <- glue("{fastas_merged_path}/{merged_name}.fasta")
+    if (file.exists(merged_fasta_path)) {
+      next
+    }
+    message("Saving: ", merged_name)
+    write.fasta(
+      sequences = list(format_seq(tf_aa), format_seq(rec_aa)),
+      names =list(seqinr::getName(tf_aa), seqinr::getName(rec_aa)),
+      file.out = merged_fasta_path,
+      open = "w",
+      nbchar = 60,
+      as.string = FALSE
+    )
+  }
+}
+
+# Saving trioed fasta files
+rec1 <- seqinr::read.fasta(
+  glue("{fastas_processed_tgfb[['TGFBR1']]}/processed_entries.fasta"),
+  seqtype = "AA"
+  )
+rec2 <- seqinr::read.fasta(
+  glue("{fastas_processed_tgfb[['TGFBR2']]}/processed_entries.fasta"),
+  seqtype = "AA"
+  )
+for (tf in tgf_tf) {
+  tf_aa <- seqinr::read.fasta(
+      glue("{fastas_processed_tgfb[[tf]]}/processed_entries.fasta"),
+      seqtype = "AA"
+      )
+  merged_name <- paste(seqinr::getName(tf_aa), "TGFBR1_TGFBR2", sep = "_")
+  merged_fasta_path <- glue("{fastas_merged_path}/{merged_name}.fasta")
+  if (file.exists(merged_fasta_path)) {
+    next
+  }
+  message("Saving: ", merged_name)
+  write.fasta(
+    sequences = list(
+      format_seq(tf_aa), 
+      format_seq(rec1),
+      format_seq(rec2)
+      ),
+    names =list(
+      seqinr::getName(tf_aa),
+      seqinr::getName(rec1), 
+      seqinr::getName(rec2)
+      ),
+    file.out = merged_fasta_path,
+    open = "w",
+    nbchar = 60,
+    as.string = FALSE
+  )
+}
+
 ```
 
 ### Sequence Similarity (Local & Global)
 
-```{r}
+Creating a dataframe of job metadata for slurm batchtools.
 
-# Insert code chunk for seq alignemtn
+```{r, eval=FALSE}
+
+sequence_analysis_dir <- glue(
+  "{wkdir}/data/interim/",
+  "tgfb_analyses/sequence-alignment"
+)
+tgfb_ligand_dir <- glue("{wkdir}/data/interim/alphafold-multimer/TGFB_ligands")
+shell_do(glue("mkdir -p {sequence_analysis_dir}"))
+shell_do(glue("mkdir -p {tgfb_ligand_dir}"))
+
+seqinr::write.fasta(
+  sequences = as.list(tgf_tf$sequences_aa),
+  names = as.list(tgf_tf$gene_name),
+  file.out = glue("{tgfb_ligand_dir}/tgfb_ligands.fasta"),
+  open = "w",
+  nbchar = 60,
+  as.string = FALSE
+)
+
+alignment_df_list <- bind_rows(
+  tgf_tf %>%
+    mutate(ensembl_id = gene_name) %>%
+    dplyr::select(ensembl_id, sequences_aa) %>%
+    mutate(method = "needle"),
+  tgf_tf %>%
+    mutate(ensembl_id = gene_name) %>%
+    dplyr::select(ensembl_id, sequences_aa) %>%
+    mutate(method = "water")
+) %>%
+  mutate(
+    refdb_path = glue("{tgfb_ligand_dir}/tgfb_ligands.fasta"),
+    output_dir = sequence_analysis_dir
+  )
+
+alignment_df_list %>% glimpse()
+```
+
+Executing slurm sequence alignment jobs.
+
+```{r, eval=FALSE}
+
+# configure registry ----
+cluster_run <- glue("{Sys.Date()}_TGFB-EMBOSS-Alignment_ID-{rand_string()}/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.5,
+  fs.latency = 65
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = align_fasta_sequences,
+  args = alignment_df_list,
+  reg = breg
+)
+setJobNames(jobs,
+  paste("TGFB-EMBOSS",
+  alignment_df_list$ensembl_id,
+  alignment_df_list$method,
+  sep = "_"),
+  reg = breg
+)
+getJobNames(jobs, reg = breg)
+submitJobs(jobs,
+  resources = list(
+    walltime = 3600,
+    memory = 1024,
+    ncpus = 1,
+    max.concurrent.jobs = 9999
+  )
+)
 
 ```
 
-```{r}
-# Seq alignment figure
+Aggregating alignment files.
+```{r, eval=FALSE}
+
+file_paths <- list.files(sequence_analysis_dir, pattern = "rds$", full.names = TRUE)
+needle_files <- file_paths %>%
+  keep(grepl("HP-TGM_tgfb_ligands.needle.rds", .))
+water_files <- file_paths %>%
+  keep(grepl("HP-TGM_tgfb_ligands.water.rds", .))
+
+tgfb_alignments <-  
+  bind_rows(
+    file_paths %>% 
+      keep(grepl("needle", .)) %>% 
+      load_rds_files() %>% 
+      mutate(method = "Needleman-Wunsch (global) "),
+    file_paths %>% 
+      keep(grepl("water", .)) %>% 
+      load_rds_files() %>% 
+      mutate(method = "Smith-Waterman (local)")
+  )
+
+saveRDS(tgfb_alignments,
+  glue("{wkdir}/data/interim/tgfb_analyses/sequence-alignment-df.rds")
+  )
+
 ```
 
-### Hidden Markov Model Similarity 
-
-
-### Hidden Markov Model Similarity 
 
 ```{r}
-#| warning: false
 
-# load in two pdb files and concatenate with bio3d 
+tgfb_alignments <- 
+  readRDS(
+    glue("{wkdir}/data/interim/tgfb_analyses/sequence-alignment-df.rds")
+  )
 
-# TGFB Receptor I : 
-pdb_tgfb_r1 <- read.pdb("5e8s")
-# TGFB Receptor II : 
-pdb_tgfb_r2 <- read.pdb("4xjj")
-# TGFB III :
-pdb_tgfb3 <- read.pdb("1tgj")
-# HP-TGM :
-pdb_hptgm <- read.pdb("7sxb")
+# Plotting sequence alignment data
+alignment_heatmap <- tgfb_alignments %>% 
+  ggplot(aes(x = protein_1, y = protein_2, fill = Score)) +
+  geom_tile() +
+  geom_text(aes(label = paste0(percent_identity, "%\n", percent_similarity, "%")), 
+    color = "white", size = 3) +
+  theme_bw() +
+  facet_wrap( ~ method) +
+  scale_x_discrete(expand=c(0,0)) +
+  scale_y_discrete(expand=c(0,0)) +
+  scale_fill_viridis_c(option = "G") +
+  labs(x = "", y = "", fill = "Alignment\nScore") +
+  theme(axis.text.x = element_text(angle=45, hjust=1) )
+
+ggsave(alignment_heatmap, 
+  filename = glue("{wkdir}/figures/tgfb-analysis/sequence-alignment-heatmap.png"),
+  dpi = 600, width = 7, height = 3
+)
+
+```
+
+![Local and global pairwise sequence alignment.](../figures/tgfb-analysis/sequence-alignment-heatmap.png){#fig-emboss}
+
+This figure depicts pairwise sequence alignment scores between all human TGF-β isomers I-III and the H. polygyrus TGF-β mimic (Hp-TGM). Color of the heatmap represents the alignment score and the top and bottom values within each cell indicate the percent identity and similarity of a sequence pair, respectively. These results indicate that human TGF-β isomers share a moderate degree of sequence similarity within isomer comparisons, but very little similarity with HP-TGM. This is indicated by a decrease of approximately two-fold in the percentage similarity observed in inter-species comparisons.
 
 
-view_bio3d_pdb <- function(mbio3d_pdb) {
-  # Set up the initial viewer
-  r3dmol() %>%
-    # Add model to scene
-    m_add_model(data = m_bio3d(mbio3d_pdb)) %>%
-    # Zoom to encompass the whole scene
-    m_zoom_to() %>%
-    # Set style of structures
-    m_set_style(style = m_style_cartoon(color = "#6E8FF8")) %>%
-    # Set style of specific selection (selecting by secondary)
-    m_set_style(sel = m_sel(ss = "s"),
-                style = m_style_cartoon(color = "#FFD105", arrows = TRUE)) %>%
-    # Style the alpha helix
-    m_set_style(sel = m_sel(ss = "h"), # Style alpha helix
-                style = m_style_cartoon(color = "#FC027E")) %>%
-    # Rotate the scene by given angle on given axis
-    m_rotate(angle = 90, axis = "y") %>%
-    # Animate the scene by spinning it
-    m_spin()
+### Hidden Markov Model Similarity 
+
+Creating MSA profiles for each protein using jackhmmer against UniProt.
+
+```{r, eval=FALSE}
+tgfb_fasta_dir <- glue("{wkdir}/data/interim/alphafold-multimer/TGFB_fasta")
+tgfb_fasta_paths <- paste0(
+  tgfb_fasta_dir, "/", 
+  list.files(tgfb_fasta_dir, pattern = "fasta") %>% keep(!grepl("_", .))
+)
+
+for (fasta_path in tgfb_fasta_paths) {
+  id <- fs::path_ext_remove(basename(fasta_path))
+  output_dir <- glue(
+    "{wkdir}/data/processed/",
+    "jackhmmer_results/{id}"
+  )
+  shell_do(glue("mkdir -p {output_dir}"))
+  if (!file.exists(glue("{output_dir}/{id}_msa.fasta"))) {
+    slurm_shell_do(
+      cmd = glue(
+        "jackhmmer ",
+        " --cpu 8",
+        " -N 5",
+        " -E 0.05",
+        " -A {output_dir}/{id}_msa.fasta",
+        " -o {output_dir}/{id}_jackhmmer.out",
+        " --tblout {output_dir}/{id}_seqhits.txt",
+        " --domtblout {output_dir}/{id}_domainhits.txt",
+        " --noali",
+        " {fasta_path}",
+        " /central/software/alphafold/data/uniprot/uniprot.fasta"
+      ),
+      jobname = glue("jkhmr_{fasta_path}_{rand_string()}"),
+      working_dir = wkdir,
+      ncpus = 8,
+      memory = "4G",
+      walltime = 36000
+    )
+  }
+}
+
+```
+
+Creating HMM profiles from MSAs and estimating sequence similiarity using Hmmsearch on custom protein catalog.
+
+```{r, eval=FALSE}
+
+protein_catalog_path <- glue(
+  "{homedir}/Downloads/protein_catalogs/clustered_catalogs",
+  "/merged/2023-02-13_catalog_MMSeq2-95_rep_seq.fasta"
+)
+ids <- tgfb_fasta_paths %>%
+  purrr::map(~ fs::path_ext_remove(basename(.)))
+
+for (id in ids){
+  input_dir <- glue(
+    "{wkdir}/data/processed/",
+    "jackhmmer_results/{id}"
+  )
+  output_dir <- glue(
+    "{wkdir}/data/processed/",
+    "hmmersearch_results/{id}"
+  )
+  shell_do(glue("mkdir -p {output_dir}"))
+  # make hmm profile from MSA
+  fasta_path <- glue("{input_dir}/{id}_msa.fasta")
+  shell_do(glue("hmmbuild {output_dir}/{id}.hmm {fasta_path}"))
+  # hmmsearch on protein catalog using hmm profile
+  slurm_shell_do(
+    cmd = glue(
+      "hmmsearch ",
+      " --cpu 8",
+      " -A {output_dir}/{id}_msa.hmm",
+      " -o {output_dir}/{id}_hmmsearch.out",
+      " --tblout {output_dir}/{id}_tblout.txt",
+      " --domtblout {output_dir}/{id}_domtblout.txt",
+      " --noali",
+      " {output_dir}/{id}.hmm",
+      " {protein_catalog_path}"
+    ),
+    jobname = glue("hmrsearch_{fasta_path}_{rand_string()}"),
+    working_dir = wkdir,
+    ncpus = 8,
+    memory = "4G",
+    walltime = 36000
+  )
+}
+```
+
+Visualizing pHMM results.
+
+```{r}
+
+catalogs <- c(
+  "ELGG",
+  "Hadza",
+  "KIJ",
+  "MGV",
+  "RUGS",
+  "RUMMETA",
+  "UHGP",
+  "VEuPathDB",
+  "Wormbase"
+)
+
+catalogs_cols <- pal_npg()(length(catalogs))
+names(catalogs_cols) <- catalogs
+
+hmmer_results_dir <- glue("{wkdir}/data/interim/tgfb_analyses/hmmersearch_results/")
+hmmer_results_paths <- list.dirs(
+  glue("{wkdir}/data/interim/tgfb_analyses/hmmersearch_results/"), 
+  recursive = FALSE)
+
+hmmer_hit_plots <- list()
+for (id in basename(hmmer_results_paths)) {
+  sequence_hits <- read_tblout(
+  glue("{hmmer_results_dir}/{id}/{id}_tblout.txt")
+  )
+  hmmer_hit_plots[[id]] <- sequence_hits %>% 
+    mutate(catalog = map_chr(
+        str_before_nth(domain_name, "_", 2), 
+        ~ str_remove(., "CATID_"))
+        ) %>%
+      ggplot(aes(
+        x = -log10(sequence_evalue), 
+        y = -log10(best_domain_evalue),
+        group = description
+        )) +
+      scale_color_manual(values = catalogs_cols) +
+      geom_point(aes(color = catalog)) +
+      theme_bw()
 }
 
 ```
 
 ::: panel-tabset
+#### HP-TGM
 
-#### H. polygyrus TGF-β mimic (Domain 3)
 ```{r}
-view_bio3d_pdb(pdb_hptgm)
+ggplotly(hmmer_hit_plots$`HP-TGM` )
 ```
 
-#### TGF-β III 
+#### TGF-β1
 ```{r}
-view_bio3d_pdb(pdb_tgfb3)
+ggplotly(hmmer_hit_plots$TGFB1)
 ```
 
-#### TGF-β Receptor I
+#### TGF-β2
 ```{r}
-view_bio3d_pdb(pdb_tgfb_r1)
+ggplotly(hmmer_hit_plots$TGFB2)
 ```
 
-#### TGF-β Receptor II
+#### TGF-β3
 ```{r}
-view_bio3d_pdb(pdb_tgfb_r2)
+ggplotly(hmmer_hit_plots$TGFB3)
 ```
-
 :::
 
 
+### Structural Analysis and Complex Predictions
+
 ```{r}
-library(glue)
+
 receptor_ligand_pairs <- c(
+  # "TGFB1_TGFBR1",
+  # "TGFB2_TGFBR2",
+  # "TGFB3_TGFBR1_TGFBR2",
+  # "TGFB2_TGFBR1",
+  # "TGFB2_TGFBR2",
+  # "TGFB2_TGFBR1_TGFBR2",
   "TGFB3_TGFBR1",
   "TGFB3_TGFBR2",
   "TGFB3_TGFBR1_TGFBR2",
@@ -142,8 +611,8 @@ pdb_models <- list()
 for (pair in receptor_ligand_pairs) {
   pdb_data <- bio3d::read.pdb(
     glue(
-      "~/Downloads/alphafold-multimer/{pair}/{pair}",
-      "/unrelaxed_model_5_multimer_v2_pred_4.pdb"
+      "{wkdir}/data/interim/alphafold-multimer/{pair}/{pair}",
+      "/ranked_0.pdb"
     ),
     multi = TRUE
   )
@@ -177,7 +646,7 @@ for (pair in receptor_ligand_pairs) {
 pdb_models$TGFB3_TGFBR1
 ```
 
-#### [TGF-β3 - TGF-βR1]
+#### [TGF-β3 - TGF-βR2]
 ```{r}
 pdb_models$TGFB3_TGFBR2
 ```
@@ -205,9 +674,29 @@ pdb_models$`HP-TGM_TGFBR1_TGFBR2`
 :::
 
 
+### Complex Binding Energies
 
-https://www.rcsb.org/structure/1KTZ
-
-#### **Crystal Structure of the Human TGF-beta Type II Receptor Extracellular Domain in Complex with TGF-beta3** 
+### Binding Interface Analysis
 
 
+
+## Methods
+
+**Signal Peptide Removal**
+Signal Peptide 
+Signal peptide prediction model based on a Bert protein language model encoder and a conditional random field (CRF) decoder.
+ organism as eukarya to trigger post-processing 
+of the SP predictions to prevent spurious results 
+(only predicts type Sec/SPI). using fast mode 
+
+**Sequence Similarity Analysis**
+
+
+**Structural Similarity**
+
+**Docking**
+
+**R-Packages**
+```{r}
+sessionInfo()
+```

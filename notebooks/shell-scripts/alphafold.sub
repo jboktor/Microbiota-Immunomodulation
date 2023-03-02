@@ -1,0 +1,48 @@
+#!/bin/bash
+#SBATCH --job-name=alphafold_run
+#SBATCH --time=1-00:00
+#SBATCH --nodes=1      
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:4
+#SBATCH --cpus-per-task=28
+#SBATCH --mem=240G
+#SBATCH --mail-user=jboktor@caltech.edu
+#SBATCH --mail-type=ALL
+
+while getopts "i:o:m:n:g:" opt
+do
+    case "$opt" in 
+        i ) INPUT_FASTA="$OPTARG" ;;
+        o ) OUTPUT_DIR="$OPTARG" ;;
+        m ) MODE="$OPTARG" ;;
+        n ) N_MODELS="$OPTARG" ;;
+        g ) USE_GPU="$OPTARG" ;;
+    esac
+done
+
+# Example execution
+# sbatch --job-name=testrun \
+# --output=2023-02-22_AlphaFold-Multimer_TGFB-Dg3q6b7k48/testrun.out \
+# --error=2023-02-22_AlphaFold-Multimer_TGFB-Dg3q6b7k48/testrun.err \
+# --time=1-00:00 \
+# --gres=gpu:1 \
+# --mem=128G \
+# --cpus-per-task=8 \
+# /central/groups/MazmanianLab/joeB/Microbiota-Immunomodulation/Microbiota-Immunomodulation/notebooks/shell-scripts/alphafold.sub \
+# -i testme.fasta \
+# -o /central/groups/MazmanianLab/joeB/Microbiota-Immunomodulation/Microbiota-Immunomodulation/data/interim/alphafold-multimer/testrun \
+# -m multimer
+
+
+# Load your modules as before
+module load singularity/3.8.0 alphafold/2.2.0
+
+# make output directory
+mkdir -p $OUTPUT_DIR
+
+time /central/software/alphafold/2.2.0/bin/run_alphafold.sh -g $USE_GPU \
+-m $MODE \
+-n $N_MODELS \
+-o $OUTPUT_DIR  \
+-f $INPUT_FASTA \
+-t 2010-01-01
