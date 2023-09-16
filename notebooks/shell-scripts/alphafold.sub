@@ -45,4 +45,4 @@ time /central/software/alphafold/2.2.0/bin/run_alphafold.sh -g $USE_GPU \
 -n $N_MODELS \
 -o $OUTPUT_DIR  \
 -f $INPUT_FASTA \
--t 2010-01-01
+-t 2023-03-01

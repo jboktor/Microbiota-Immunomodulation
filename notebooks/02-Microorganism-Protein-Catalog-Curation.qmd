@@ -3,10 +3,9 @@ title: "Protein Catalog Curation"
 editor: visual
 author: "Joe Boktor"
 date: '2023-01-24'
-eval: false
 format: 
   html:
-    font-family: helvetica neueu
+    font-family: helvetica neue
     page-layout: full
     toc: true
     toc-location: left
@@ -100,11 +99,11 @@ Databases consisting of 210 genomes, representing 169 distinct species from the 
 | eukaryotic pathogen database (Release 61)                          |         |           |                                    |         |                |                                                                                                |                                                                                                                                   |
 +--------------------------------------------------------------------+---------+-----------+------------------------------------+---------+----------------+------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------+
 
-## Downloading and Formatting Sequence Data
-
 Analysis Setup
 
 ```{r}
+#| warning: false
+
 library(tidyverse)
 library(reticulate)
 library(magrittr)
@@ -112,10 +111,18 @@ library(glue)
 library(seqinr)
 library(future)
 library(future.batchtools)
+library(furrr)
 library(fs)
 library(tictoc)
 library(listenv)
 library(progress)
+library(tibble)
+library(protr)
+library(kableExtra)
+library(plotly)
+library(ggsci)
+library(data.table)
+library(ggside)
 
 tmpdir <- "/central/scratch/jbok/tmp"
 homedir <- "/central/groups/MazmanianLab/joeB"
@@ -124,14 +131,99 @@ wkdir <- glue(
   "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
 )
 src_dir <- glue("{wkdir}/notebooks")
-source(glue("{src_dir}/R-scripts/helpers_general.R"))
-source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
-protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+source(glue("{src_dir}/R_scripts/helpers_sequence-screens.R"))
+protein_catalogs <- glue("{homedir}/Downloads/protein_catalogs")
 ```
+
+Visualizing catalog summary statistics
+```{r, eval=FALSE}
+#| fig-cap: Catalog summary statistics
+
+catalog_stats <- tribble(
+  ~catalog, ~Bacteria, ~Archaea, ~Virus, ~Eukaryote, ~Genomes, ~Samples, ~proteins95,
+  "UHGP", 1, 1, 0, 0, 289232, 25088, 18482368,
+  "KIJ", 1, 1, 0, 0, 29082, 845, 6312390,
+  "ELGP", 1, 1, 0, 0, 6122, 32277, 3879904,
+  "Hadza", 1, 1, 1, 1, 94971, 388, 32431351,
+  "RUMMETA", 1, 1, 0, 0, 10373, 370, 109586913,
+  "RUGs", 1, 1, 0, 0, 5588, 207, 5502611,
+  "MGV", 0, 0, 1, 0, 189680, NA, 1725656,
+  "WormBase", 0, 0, 0, 1, 210, NA, 10328252,
+  "EuPathDB", 0, 0, 0, 1, 689, NA, 3456934
+)
+
+p_bar1 <- catalog_stats %>%
+  ggplot(aes(y = reorder(catalog, proteins95), x = proteins95)) +
+  geom_col(width = 0.6, fill = "lightblue") +
+  labs(y = NULL, x = "No. of proteins in each catalog (95% similarity)") +
+  theme_light() +
+  scale_x_continuous(expand = c(0, 0)) +
+  theme(panel.grid.major.y = element_blank())
+p_bar2 <- catalog_stats %>%
+  ggplot(aes(y = reorder(catalog, Genomes), x = Genomes)) +
+  geom_col(width = 0.6, fill = "lightblue") +
+  labs(y = NULL, x = "No. of Assembled Genomes") +
+  theme_light() +
+  scale_x_continuous(expand = c(0, 0)) +
+  theme(panel.grid.major.y = element_blank())
+p_bar3 <- catalog_stats %>%
+  drop_na(Samples) %>%
+  ggplot(aes(y = reorder(catalog, Samples), x = Samples)) +
+  geom_col(width = 0.6, fill = "lightblue") +
+  labs(y = NULL, x = "No. of Mammalian Samples") +
+  theme_light() +
+  scale_x_continuous(expand = c(0, 0)) +
+  theme(panel.grid.major.y = element_blank())
+
+patch1 <- (p_bar1  / p_bar2 / p_bar3) +
+  plot_layout(heights = c(1, 1, 0.666))
+
+ggsave(patch1, 
+  filename = glue("{wkdir}/figures/protein_catalog/summary_stats_barplot.png"),
+  width = 6, height = 8, dpi = 300)
+
+```
+
+
+```{r, eval=FALSE}
+
+p_donut <- catalog_stats %>%
+  summarise_at(vars(Bacteria, Archaea, Virus, Eukaryote), sum) %>%
+  pivot_longer(cols = everything(), names_to = "category", values_to = "count") %>%
+  mutate(fraction = count / sum(count)) %>%
+  mutate(ymax = cumsum(fraction)) %>%
+  mutate(ymin = c(0, head(ymax, n = -1))) %>%
+  mutate(labelPosition = (ymax + ymin) / 2) %>%
+  mutate(label = paste0(category, "\n catalogs: ", count)) %>%
+  ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  geom_rect() +
+  geom_text( x=2, aes(y=labelPosition, label=label, color=category), size=5 ) +
+  scale_fill_npg() +
+  scale_color_npg() +
+  coord_polar(theta="y") +
+  xlim(c(-1, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+ggsave(p_donut, 
+  filename = glue("{wkdir}/figures/protein_catalog/domain_donut.png"),
+  width = 8, height = 8, dpi = 300)
+
+```
+
+
+![Representation of Domains](../figures/protein_catalog/domain_donut.png){width=60%}
+
+![Catalog summary statistics](../figures/protein_catalog/summary_stats_barplot.png)
+
+
+## Downloading and Formatting Sequence Data
+
 
 #### UHGP v 2.0
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 uhgp_ftp_links <- 
   paste0(
     "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/",
@@ -164,7 +256,7 @@ slurm_shell_do(
 
 #### ELGG
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 # Download 95% ELGG protein faa via https://zenodo.org/record/6969520/files/ELGP_95.faa.gz?download=1
 # wget https://zenodo.org/record/6969520/files/ELGP_95.faa.gz 
 wget_download_slurm(
@@ -189,7 +281,7 @@ slurm_shell_do(
 
 #### KIJ
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 # HRGM (KIJ 100 only) using 110 India, 645 Japan, and 90 Korean fecal samples
 # https://www.mbiomenet.org/HRGM/data/protein_catalog/2.KIJ_CD-HIT-100_Proteins/KIJ_CD-HIT-100_Proteins.faa.gz
 wget_download_slurm(
@@ -214,7 +306,7 @@ slurm_shell_do(
 
 #### Hadza/Nepali Hunter-Gatherers
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 # Downloading Hadza Mag metadata
 shell_do(glue(
   "mkdir -p {wkdir}/data/input/protein_catalog_metadata"
@@ -230,7 +322,7 @@ shell_do(glue(
 
 ```
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 hadza_meta_PRJEB49206 <-
   read.delim(
     glue(
@@ -284,7 +376,7 @@ toc()
 
 ```
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 #______________________________________________________________________
 # Prodigal on Hadza MAGs ----
 # Initiate future.batchtools backend for parallel processing
@@ -363,7 +455,7 @@ for (f in hadza_files){
 
 #### Ruminants - RUMMETA
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 #' https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-021-01078-x 
 #' An integrated gene catalog and over 10,000 metagenome-assembled genomes 
 #' from the gastrointestinal microbiome of ruminants
@@ -388,7 +480,7 @@ slurm_shell_do(
 
 #### Ruminants - RUGs
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 rug_ftp_links <- 
   paste0(
     "http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/",
@@ -419,7 +511,7 @@ slurm_shell_do(
 
 #### MGV
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 wget_download_slurm(
   jobname = "MGV_proteins",
   download_link = "https://portal.nersc.gov/MGV/MGV_v1.0_2021_07_08/mgv_proteins.faa", 
@@ -431,7 +523,7 @@ wget_download_slurm(
 
 #### VEuPathDB
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs/")
 VEuPathDB_meta <-
   read.delim(glue("{wkdir}/data/input/protein_catalog_metadata/VEuPathDB_release-61_2022-12-15.txt"),
@@ -457,7 +549,7 @@ for (f in VEuPathDB_links) {
 
 ```
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 # Some runs failed, collect and examine filepaths
 download_failed <- list()
 for (f in VEuPathDB_links) {
@@ -531,7 +623,7 @@ slurm_shell_do(
 
 #### WormBase
 
-```{r, eval = FALSE}
+```{r, eval=FALSE}
 wormbase_meta <-
   read.delim(
     glue(
@@ -576,6 +668,20 @@ slurm_shell_do(
 
 ```
 
+#### Non-Human Primates (NHPs)
+
+```{r, eval=FALSE}
+
+wget_download_slurm(
+  jobname = "NHP_MAGS",
+  download_link = "https://datadryad.org/stash/downloads/file_stream/2211400", 
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  output_dir = "/central/groups/MazmanianLab/joeB/Downloads/mag_library/Pan-NHPs"
+  )
+
+```
+
+
 ## Catalog Assembly
 
 MMSeq2 95% similarity clustering of each catalog independently to remove redundant sequences
@@ -584,6 +690,7 @@ MMSeq2 95% similarity clustering of each catalog independently to remove redunda
 # Utility function for running MMSeq2 clustering on the HPC
 slurm_shell_do_mmseq2_clust <- function(input_fasta,
                                         output,
+                                        id_threshold = 0.95,
                                         jobname = glue("MMSeq2-{rand_string()}"),
                                         memory = "120G", # per cpu
                                         ncpus = 12,
@@ -593,14 +700,15 @@ slurm_shell_do_mmseq2_clust <- function(input_fasta,
   source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
   mmseq_cmd <- glue(
     "mmseqs easy-linclust --cov-mode 1 -c 0.8",
-    " --kmer-per-seq 200",
-    " --min-seq-id 0.95",
+    " --kmer-per-seq 80",
+    " --min-seq-id {id_threshold}",
     " --threads {ncpus}",
     " {input_fasta}",
     " {output}",
     " {tmpdir}"
   )
   slurm_shell_do(
+    template_path = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
     cmd = mmseq_cmd,
     jobname = jobname,
     memory = memory,
@@ -725,9 +833,10 @@ for (catalog_path in clustered_named_rep_paths) {
 }
 ```
 
-MMSeq2 95% similarity clustering of concatenated catalogs
+MMSeq2 similarity clustering of concatenated catalogs
 
 ```{r, eval=FALSE}
+# Clustering at 95% (kmer for seq 200)
 slurm_shell_do_mmseq2_clust(
   input_fasta = glue(
     "{protein_catalogs}/clustered_catalogs/",
@@ -741,11 +850,42 @@ slurm_shell_do_mmseq2_clust(
   ncpus = 8
 )
 
+# 90% Identity (kmer for seq 200)
+slurm_shell_do_mmseq2_clust(
+  input_fasta = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_concatenated-catalog.fasta"
+  ),
+  output = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_catalog_MMSeq2-90"
+  ),
+  id_threshold = 0.9,
+  memory = "10G",
+  ncpus = 8
+)
+
+# 50% Identity (kmer for seq 80)
+slurm_shell_do_mmseq2_clust(
+  input_fasta = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_concatenated-catalog.fasta"
+  ),
+  output = glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_catalog_MMSeq2-50"
+  ),
+  walltime = 270000,
+  id_threshold = 0.5,
+  memory = "250G",
+  ncpus = 4
+)
+
 ```
 
 Chunking protein catalog into 50 bins
 
-```{r}
+```{r, eval=FALSE}
 
 #' function to divide original fasta into N smaller fasta files, roughly even in size
 #' using bash awk
@@ -768,7 +908,7 @@ get_awk_chunk_cmd <- function(fasta_path, nbins, output_dir){
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 slurm_shell_do(
   cmd = get_awk_chunk_cmd(
     fasta_path = 
@@ -786,6 +926,399 @@ slurm_shell_do(
 
 ```
 
-## Results
 
+Calculating the number of unique proteins in the curated catalog at each clustering threshold
+
+```{r, eval=FALSE}
+catalog_clustered_rep_paths <- list.files(
+  glue("{protein_catalogs}/clustered_catalogs/merged"), 
+  pattern = "rep_seq.fasta",
+  full.names = TRUE
+)
+repseq_protein_n <- list()
+for (catalog in catalog_clustered_rep_paths) {
+  message("Counting proteins in: \n", catalog)
+  repseq_protein_n[[catalog]] <- 
+    shell_do(
+        glue("grep -c '^>' {catalog}"),
+        stdout_path = TRUE
+    )  %>% 
+    as.numeric
+    repseq_protein_n[[catalog]] %>% print()
+}
+
+```
+
+
+```{r}
+catalog_n_data <-  tribble(
+  ~`Clustering Threshold`, ~`# of Proteins`,
+  "50%", 58025475,
+  "90%", 133902480,
+  "95%", 164949326,
+)
+
+catalog_n_data %>%
+    kable(format.args = list(big.mark = ",")) %>% 
+    kable_styling(
+      font_size = 15,
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = F
+      )
+
+```
+
+
+
+Gathering representative sequences from 50% clustered catalog
+
+```{r, eval=FALSE}
+shell_do(
+  glue(
+    "cd {protein_catalogs}/clustered_catalogs/merged &&"
+    " grep -o '^>.*' 2023-02-13_catalog_MMSeq2-50_rep_seq.fasta >",
+    " 2023-02-13_catalog_MMSeq2-50_rep_seq_headers.txt"
+    )
+)
+```
+
+
+```{r, eval=FALSE}
+# Read in txt file with 50% clustered catalog headers
+cluster_50_headers <- read.delim(
+  glue(
+    "{protein_catalogs}/clustered_catalogs/merged/",
+    "2023-02-13_catalog_MMSeq2-50_rep_seq_headers.txt"
+    ),
+    stringsAsFactors = F, header = F)
+
+set.seed(42)
+cluster_50_headers_downsample <- cluster_50_headers %>%
+  as.data.table() %>%
+  slice_sample(n = 500000) %>%
+  mutate(V1 = gsub(">", "", V1) %>% str_trim(side = "right")) %>%
+  pull(V1)
+
+# save downsampled fasta
+extract_seq_from_catalog(
+  fasta_header_list = cluster_50_headers_downsample,
+  output_fasta_path = glue(
+    "{protein_catalogs}/clustered_catalogs/merged/",
+    "2023-02-13_catalog_MMSeq2-50_500k-subsample.fasta"
+  ),
+  catalog_path = glue(
+    "{protein_catalogs}/clustered_catalogs/merged/",
+    "2023-02-13_catalog_MMSeq2-50_rep_seq.fasta"
+  )
+)
+
+subsamp550k <- protr::readFASTA(
+  glue(
+    "{protein_catalogs}/clustered_catalogs/merged/",
+    "2023-02-13_catalog_MMSeq2-50_500k-subsample.fasta"
+  )
+)
+saveRDS(
+  subsamp550k,
+  glue("{wkdir}/data/interim/protein_catalog/{Sys.Date()}_custom_catalog_500k.rds")
+)
+
+```
+
+
+## Calculating Molecular Descriptors for Protein Catalog
+
+Calculating peptide lengths and filtering peptides shorter than 7 amino acids
+```{r, eval=FALSE}
+subsamp500k <- readRDS(
+  glue(
+    "{wkdir}/data/interim/protein_catalog/",
+    "2023-04-24_custom_catalog_500k.rds"
+  )
+)
+seq_lengths <- subsamp500k %>% nchar() %>% as.list()
+# select proteins that are at least 7 amino acids long
+filtered_seq_list <- seq_lengths %>% keep(. > 6)
+filtered_subsample_seqs <- subsamp500k %>%
+  keep(names(.) %in% names(filtered_seq_list))
+
+set.seed(42)
+random_catalog_balanced_headers_n100 <-
+  data.frame("fasta_headers" = names(filtered_subsample_seqs)) %>%
+  mutate(catalog = strex::str_before_nth(fasta_headers, "_", 2) %>% gsub("CATID_", "", .)) %>%
+  group_by(catalog) %>%
+  slice_sample(n = 100) %>%
+  pull(fasta_headers)
+saveRDS(
+  random_catalog_balanced_headers_n100,
+  glue("{wkdir}/data/interim/protein_catalog/random_catalog_balanced_headers_n100.rds")
+)
+
+seq_lengths_df <- as.data.frame(seq_lengths)  %>% 
+  pivot_longer(everything(), names_to = "id", values_to = "protein_length") %>% 
+  distinct()
+saveRDS(
+  seq_lengths_df,
+  glue("{wkdir}/data/interim/protein_catalog/seq_lengths_df.rds")
+)
+
+```
+
+Visualizing histogram of sequence lengths
+
+```{r, eval=FALSE}
+seq_lengths_df <- readRDS(
+  glue("{wkdir}/data/interim/protein_catalog/seq_lengths_df.rds")
+)
+
+p_cat50_seqhist <- seq_lengths_df %>%
+  ggplot(aes(x = protein_length)) +
+  scale_x_log10() +
+  geom_histogram(bins = 250, fill = "lightblue") +
+  labs(x = "Protein Length", y = "Count") +
+  theme_bw()
+
+ggsave(
+  glue("{wkdir}/figures/protein_catalog/sequence-length-hist.png"),
+  p_cat50_seqhist,
+  width = 6, height = 5, dpi = 300
+)
+
+```
+
+![Catalog sequence lengths](../figures/protein_catalog/sequence-length-hist.png)
+
+
+Calculating Normalized Moreau-Broto autocorrelation descriptors 
+
+```{r}
+protr_descriptors <- tribble(
+  ~Accession, ~Molecular_Descriptor,
+  "CIDH920105", "Normalized Average Hydrophobicity Scales",
+  "BHAR880101", "Average Flexibility Indices",
+  "CHAM820101", "Polarizability Parameter",
+  "CHAM820102", "Free Energy of Solution in Water, kcal/mole",
+  "CHOC760101", "Residue Accessible Surface Area in Tripeptide",
+  "BIGC670101", "Residue Volume",
+  "CHAM810101", "Steric Parameter",
+  "DAYM780201", "Relative Mutability"
+)
+protr_descriptors %>%
+    kable() %>% 
+    kable_styling(
+      font_size = 15,
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = F
+      )
+
+```
+
+
+```{r, eval=FALSE}
+library(protr)
+possiblyextractMoreauBroto <- possibly(.f = extractMoreauBroto, otherwise = NULL)
+possiblyextractDescScales <- possibly(.f = extractDescScales, otherwise = NULL)
+
+random_catalog_balanced_headers_n100 <- readRDS(
+  glue("{wkdir}/data/interim/protein_catalog/random_catalog_balanced_headers_n100.rds")
+)
+
+future::plan(multisession)
+tic()
+proteochemical_descriptors <-
+  filtered_subsample_seqs[random_catalog_balanced_headers_n100] %>%
+  furrr::future_map(~possiblyextractMoreauBroto(., nlag = 7)) %>%
+  bind_rows(.id = "id")
+toc()
+saveRDS(
+  proteochemical_descriptors,
+  glue("{wkdir}/data/interim/protein_catalog/extractMoreauBroto.rds")
+)
+
+future::plan(multisession)
+tic()
+molPropDescriptors <-
+  filtered_subsample_seqs[random_catalog_balanced_headers_n100] %>%
+  furrr::future_map(~possiblyextractDescScales(
+    ., propmat = "AAMolProp", pc = 3, lag = 7, silent = TRUE)
+    ) %>%
+  bind_rows(.id = "id")
+toc()
+saveRDS(
+  molPropDescriptors,
+  glue("{wkdir}/data/interim/protein_catalog/molPropDescriptors.rds")
+)
+```
+
+Visualizing autocorrelation descriptors 
+
+```{r, eval=FALSE}
+MoreauBrotoDescriptors <- readRDS(
+  glue("{wkdir}/data/interim/protein_catalog/extractMoreauBroto.rds")
+)
+pca_df <- MoreauBrotoDescriptors %>%
+  distinct() %>%
+  mutate(catalog = strex::str_before_nth(id, "_", 2) %>% gsub("CATID_", "", .))
+
+pca_df %>%
+  plot_ly(
+    x = ~CHOC760101.lag7,
+    y = ~CHAM820101.lag7,
+    z = ~DAYM780201.lag7,
+    text = ~ paste("ID:", id),
+    mode = "markers", marker = list(size = 6)
+  ) %>% add_markers(
+    color = ~ catalog,
+    colors = pal_npg(palette = c("nrc"), alpha = 1)(9)
+  ) %>%
+  layout(scene = list(
+    xaxis = list(title = "Residue Accessible Surface Area in Tripeptide"),
+    yaxis = list(title = "Polarizability Parameter"),
+    zaxis = list(title = "Relative Mutability")
+  ))
+```
+
+Visualizing Molecular Property descriptors 
+```{r}
+
+molPropDescriptors <- readRDS(
+  glue("{wkdir}/data/interim/protein_catalog/molPropDescriptors.rds")
+)
+pca_df <- molPropDescriptors %>%
+  distinct() %>%
+  mutate(catalog = strex::str_before_nth(id, "_", 2) %>% gsub("CATID_", "", .))
+
+pca_df %>%
+  plot_ly(
+    x = ~scl1.lag7,
+    y = ~scl2.lag7,
+    z = ~scl3.lag7,
+    text = ~ paste("ID:", id),
+    mode = "markers", marker = list(size = 6)
+  ) %>% add_markers(
+    color = ~ catalog,
+    colors = pal_npg(palette = c("nrc"), alpha = 1)(9)
+  ) %>%
+  layout(scene = list(
+    xaxis = list(title = "Scale 1 - Lag 7"),
+    yaxis = list(title = "Scale 2 - Lag 7"),
+    zaxis = list(title = "Scale 3 - Lag 7")
+  ))
+```
+
+
+## Catalog Comparisons to UniRef90 and MGnify90
+Downloading MGnify90 and UniRef90 for comparison
+```{r, eval=FALSE}
+wget_download_slurm(
+  jobname = "mgy_clusters_fasta",
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  walltime = "4-00:00:00",
+  download_link = "http://ftp.ebi.ac.uk/pub/databases/metagenomics/peptide_database/2023_02/mgy_clusters.fa.gz",
+  output_dir = "/central/groups/MazmanianLab/joeB/Downloads/RefDBs/MGnify_2023_02/"
+)
+
+wget_download_slurm(
+  jobname = "uniref90_fasta",
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  walltime = "4-00:00:00",
+  download_link = "https://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref90/uniref90.fasta.gz",
+  output_dir = "/central/groups/MazmanianLab/joeB/Downloads/RefDBs/UniRef/"
+)
+
+```
+
+
+Wrangling UniRef90 and MGnify90
+```{r, eval=FALSE}
+refdb_dir <- "/central/groups/MazmanianLab/joeB/Downloads/RefDBs"
+scratch_dir <- "/central/scratch/jbok/mim_temp/clustering"
+shell_do(glue("mkdir -p {scratch_dir}"))
+custom_90p_path <- glue(
+  "{protein_catalogs}/clustered_catalogs/merged/",
+  "2023-02-13_catalog_MMSeq2-90_rep_seq.fasta"
+  )
+
+# copy gz fasta files into scratch dir
+slurm_shell_do(
+  glue("cp {refdb_dir}/MGnify_2023_02/mgy_clusters.fa.gz {scratch_dir}/"), 
+  memory = "10G"
+  )
+slurm_shell_do(
+  glue("cp {refdb_dir}/UniRef/uniref90.fasta.gz {scratch_dir}/"), 
+  memory = "10G"
+  )
+
+# unzip fasta files && rename
+slurm_shell_do(glue(
+  "cd {scratch_dir} &&",
+  " gunzip mgy_clusters.fa.gz &&",
+  " mv mgy_clusters.fa MGnify90_custom90_merged.fasta"), 
+  memory = "10G"
+  )
+slurm_shell_do(glue(
+  "cd {scratch_dir} &&",
+  " gunzip uniref90.fasta.gz &&",
+  " mv uniref90.fasta UniRef90_custom90_merged.fasta"), 
+  memory = "10G"
+  )
+
+# Concatenate CUSTOM 90% Catalog with UniRef90 and MGnify90
+slurm_shell_do(
+  glue("cat {custom_90p_path} >> {scratch_dir}/UniRef90_custom90_merged.fasta"), 
+  memory = "10G"
+  )
+slurm_shell_do(
+  glue("cat {custom_90p_path} >> {scratch_dir}/MGnify90_custom90_merged.fasta"), 
+  memory = "10G"
+  )
+
+```
+
+Clustering UniRef90 and MGnify90 + Custom catalog with MMSeq2
+```{r, eval=FALSE}
+
+# 90% Identity (kmer for seq 80) UniRef90
+slurm_shell_do_mmseq2_clust(
+  input_fasta = glue("{scratch_dir}/UniRef90_custom90_merged.fasta"),
+  output = glue("{scratch_dir}/2023-04-17_MMSeq2-90_UniRef90_custom90"),
+  walltime = 270000,
+  id_threshold = 0.9,
+  memory = "250G",
+  ncpus = 4
+)
+
+# 90% Identity (kmer for seq 80) MGnify90
+slurm_shell_do_mmseq2_clust(
+  input_fasta = glue("{scratch_dir}/MGnify90_custom90_merged.fasta"),
+  output = glue("{scratch_dir}/2023-04-17_MMSeq2-90_MGnify90_custom90"),
+  walltime = 270000,
+  id_threshold = 0.9,
+  memory = "300G",
+  ncpus = 4
+)
+
+```
+
+
+Downloading HH-suite3 UniRef30 database 
+```{r}
+wget_download_slurm(
+  jobname = "uniref30_hhsuite",
+  slurm_out = "/central/scratch/jbok/slurmdump/",
+  download_link = "https://gwdu111.gwdg.de/~compbiol/uniclust/2022_02/UniRef30_2022_02_hhsuite.tar.gz",
+  output_dir = glue("{homedir}/Downloads/RefDBs/HHsuite3db")
+)
+
+```
+
+
+## Results
 At 95% similarity, our catalog contains 164,949,326 unique protein sequences. This compendium represents the global human and ruminant gut microbiome genomic repertoire, in addition to common eukaryotic pathogens.
+
+
+
+
+```{r}
+sessionInfo()
+```

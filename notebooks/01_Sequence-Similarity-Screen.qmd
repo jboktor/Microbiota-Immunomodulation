@@ -5,7 +5,7 @@ author: "Joe Boktor"
 date: '2023-01-24'
 format: 
   html:
-    font-family: helvetica neueu
+    font-family: helvetica neue
     page-layout: full
     toc: true
     toc-location: left
@@ -19,19 +19,971 @@ bibliography: references.bib
 
 ## Background
 
-We have selected immune protein targets of interest and assembled a novel microbial protein catalog, globally representing \_\_\_ genomes and \_\_ protein sequences with greater than 5% dissimilarity. Next, we will apply various *in-silico* approaches for screen for both similarity, and binding potential between protein data-sets.
+Recent advances in protein structure prediction have enabled a massive expansion of publically available protein structures. In parallel, the decrease in cost of next-generation sequencing has resulted in a dramatic increase in the number of novel microbial genomes discovered in recent years, shedding light on previously unexplored and uncultured micro-organisms with vast implications for our understanding of microbial influences in human health. This combination of novel microbial data and new machine learning stratgies for protein folding, design, and representation provides a unique opportunity to seek out undiscovered protein host-microbe-interactions (HMI).
+
+We have selected immune protein targets of interest and assembled a novel microbial protein catalog, globally representing 164,949,326 protein sequences with greater than 5% dissimilarity. Here we will apply various *in-silico* approaches to screen for sequence similarity between our curated protein catalog and human myeloid and lymphocyte effector molecules.
+
 
 ## Objectives
 
 The goal of this notebook will be to implement sequence similarity algorithms between our microbial protein catalog and host immune proteins of interest. We will implement a three-fold approach considering multiple sequence evolution paradigms including
 
-1.  global sequence alignment (Needleman-Wunsch)
-2.  local sequence alignment (Smith-Waterman)
-3.  motif-centric analysis via profile Hidden Markov Models.
+1.  profile Hidden Markov Models (pHMMs)
+2.  global sequence alignment (Needleman-Wunsch)
+3.  local sequence alignment (Smith-Waterman)
 
 The Needleman-Wunch global sequence alignment approach conducts end-to-end alignment and performs best on highly similar sequences of similar length. In contrast, the Smith-Waterman algorithm conducts local sequence alignment between two sequences pairs and searches for contiguous subsections between the pair. This approach will provide better sensitivity for detecting sequences with conserved subsections in-between insertion and deletion regions.
 
-## Global Sequence Alignment - Needleman-Wunsch
+
+## Analysis
+
+### Workflow
+
+```{mermaid}
+%%| fig-width: 10
+flowchart LR
+  A(Human Immune \nGenes) --> |Signal Peptide \n removal| B(Target Gene \ntrimmed)
+  D[(Microbal Protein \nCatalog \n160+ million seqs)] --> E[/Sequence \nAlignment/]
+  style E fill:lightgrey
+  E --> F(Results: Sequence Similarity \n microbial catalog)
+  B --> BA[/hhblits\nsearch/]
+  BA --> C(Target Gene\n MSA)
+  style BA fill:lightgrey
+  DA[(UniRef30 \nHMM DB)] --> BA
+  B --> E
+  B --> G[/Sequence \nAlignment/]
+  style G fill:lightgrey
+  C --> G
+  G --> H(Results: Sequence Similarity \ntarget gene variability)
+  C --> |build HMM| I(profile Hidden Markov Model\n pHMM)
+  I --> J[/Hmmsearch/]
+  style J fill:lightgrey
+  D --> J
+  J --> K(Results: pHMM \n microbial catalog hits)
+  
+```
+
+
+### Setup
+Analysis setup
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(viridis)
+library(strex)
+library(plotly)
+library(ggsci)
+library(data.table)
+library(kableExtra)
+# Plotting functions
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+source(glue("{src_dir}/R_scripts/helpers_sequence-screens.R"))
+source(glue("{src_dir}/R_scripts/rhmmer-package.R"))
+protein_catalogs <- glue("{homedir}/Downloads/protein_catalogs")
+```
+
+```{r}
+# Misc params
+catalogs <- c(
+  "ELGG",
+  "Hadza",
+  "KIJ",
+  "MGV",
+  "RUGS",
+  "RUMMETA",
+  "UHGP",
+  "VEuPathDB",
+  "Wormbase"
+)
+catalogs_cols <- pal_npg()(length(catalogs))
+names(catalogs_cols) <- catalogs
+
+```
+
+```{r, eval=FALSE}
+reticulate::use_condaenv(condaenv = "pdmbsR", required = TRUE)
+gget <- import("gget")
+```
+
+### Selecting Immune proteins of interest
+
+We utilize the [Immport gene lists]([LINK](https://www.immport.org/shared/genelists) (Updated: July 2020) to collect a list of expertly curated immune system relevant genes. We compiled data across the following categories: 
+
+ - Antigen Processing and Presentation
+ - Antimicrobials
+ - TCR Signaling Pathway
+ - BCR Signaling Pathway
+ - Cytokines + Receptors
+ - Chemokines + Receptors
+ - Interferons
+ - Interleukins         
+ - Natural Killer Cell Cytotoxicity
+ - TGFb Family Members
+ - TNF Family Members
+
+Further, we excluded genes under the following categories which are unlikely candidates for microbial mimicry: (T Cell Receptors, Immunoglobulins, and HLA alleles).
+
+Loading Immport gene sets
+```{r, eval=FALSE}
+gene_df <- read.delim(
+  glue("{wkdir}/data/input/Immport_gene_lists/ImmportGeneList.txt"),
+      stringsAsFactors = FALSE, header = TRUE
+      )
+go_gene_df <- read.delim(
+  glue("{wkdir}/data/input/Immport_gene_lists/ImmportGeneListGOAnnotation.txt"),
+      stringsAsFactors = FALSE, header = TRUE
+      )
+immune_goi <- gene_df %>%  
+  select(-c(Chromosome, Category)) %>% 
+  filter(
+    !grepl("HLA", Symbol),
+    !grepl("immunoglobulin", Name),
+    !grepl("IGK|IGL", Symbol),
+    !grepl("T cell receptor", Name)
+    ) %>% 
+  distinct()
+immune_goi %>% pull(Symbol)
+immune_goi %>% glimpse()
+
+```
+
+Running gget-search on each gene symbol to obtain ensembl ID's and metadata 
+```{r, eval=FALSE}
+# Download Ensembl IDs for all genes of interest using gget
+pb <- progress_bar$new(total = nrow(immune_goi))
+gget_results <- tibble()
+for (gene in immune_goi$Symbol) {
+  pb$tick()
+  ggout <- try({ 
+    gget$search(gene, "homo_sapiens", 'gene') %>% 
+      filter(gene_name == gene, biotype == "protein_coding") %>% 
+      mutate_all(as.character)
+    })
+  if (class(ggout) == "data.frame") {
+    gget_results %<>% bind_rows(ggout)
+  }
+}
+saveRDS(
+  gget_results,
+  glue("{wkdir}/data/interim/tmp/2023-03-07_gget_proteins-of-interest-noseq.rds")
+)
+
+```
+
+In a first pass attempt, gene symbols were used to search against the UniProt database to collect ensembl IDs and fasta sequences for each protein of interest.
+
+
+```{r, eval=FALSE}
+# load the list of genes of interest
+ gget_results <- readRDS(
+  glue("{wkdir}/data/interim/tmp/2023-03-07_gget_proteins-of-interest-noseq.rds"
+  ))
+  
+# double check that all genes of interest are in the gget_results
+gget_results$gene_name %>% unique() %>% length()
+immune_goi$Symbol %>% unique() %>% length()
+#' The following genes of interest are not in the gget_results
+#' upon further expected inspection, 
+#' these genes do not have protein coding sequences available
+#' in Ensembl
+setdiff(
+  immune_goi$Symbol %>% unique(),
+  gget_results$gene_name %>% unique()
+)
+```
+
+
+Collecting amino acid sequences using ensembl ID's
+```{r, eval=FALSE}
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue(
+    "{wkdir}/batchtools_templates/",
+    "batchtools.slurm.tmpl"
+    ),
+  resources = list(
+    name = glue("gget-info_{rand_string()}"),
+    memory = "100",
+    ncpus = 1,
+    walltime = 3600
+  )
+)
+
+eids_list <- gget_results$ensembl_id
+n_jobs <- ceiling(length(eids_list) / 30)
+download_runs <- listenv()
+for (job in 1:n_jobs) {
+  eids_chunk <- chunk_func(eids_list, n_jobs)[[job]]
+  download_runs[[job]] %<-% slurm_gget_seq(eids_chunk)
+}
+
+seqs_list <- download_runs %>% as.list()
+seqs_df <- unlist(seqs_list, recursive = T, use.names = TRUE) %>% 
+  dplyr::bind_rows(.id = "id") %>% 
+  tidyr::pivot_longer(!id, names_to = "ensembl_id", values_to = "sequences_aa") %>% 
+  dplyr::select(-id)
+seqs_df %>% glimpse()
+
+keyname_hits <- 
+  gget_results %>% 
+  dplyr::left_join(seqs_df, by = "ensembl_id")
+
+# Check that all gene symbols of interest are in keyname_hits
+gget_results$gene_name %>% unique() %>% length()
+keyname_hits$gene_name %>% unique() %>% length()
+
+# randomly de-duplicate  ensembl ID's mapping to identical gene symbols
+keyname_hits %<>% 
+  group_by(gene_name, sequences_aa) %>% 
+  slice_sample(n = 1) %>% 
+  drop_na(sequences_aa)
+
+saveRDS(
+  keyname_hits,
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "{Sys.Date()}_gget_immport.rds"
+  )
+)
+
+```
+
+
+In total, we are able to analyze 1,226 human target proteins within the following immport categories.
+
+
+```{r}
+#| tbl-colwidths: false
+
+workflow_meta <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-03-14_workflow-meta-1_FastaQC.rds"
+))
+
+gene_df <- read.delim(
+  glue("{wkdir}/data/input/Immport_gene_lists/ImmportGeneList.txt"),
+  stringsAsFactors = FALSE, header = TRUE
+)
+gene_df %<>%
+  mutate(
+    Category =
+      Category %>%
+      gsub("_Member|_Members", "", .) %>%
+      gsub("Receptors", "Receptor", .) %>%
+      gsub("Chemokines", "Chemokine", .) %>%
+      gsub("Cytokines", "Cytokine", .) %>%
+      gsub("TCRsignalingPathway", "TCR Signaling Pathway", .) %>%
+      gsub("BCRSignalingPathway", "BCR Signaling Pathway", .) %>%
+      gsub("NaturalKiller_Cell_Cytotoxicity", "NK Cytotoxicity", .) %>%
+      gsub("_", " ", .)
+  )
+
+gene_df %>%
+  filter(Symbol %in% workflow_meta$gene_name) %>%
+  group_by(Category) %>% 
+  dplyr::summarize(n = n()) %>%
+  arrange(Category, -n) %>% 
+  kableExtra::kable() %>%
+  kableExtra::kable_styling()
+
+```
+
+```{r}
+library(DT)
+workflow_meta %>%
+  select(gene_name, ensembl_id, ext_ref_description) %>% 
+  DT::datatable(options = list(scrollX = TRUE))
+```
+
+### Formating FASTA for analysis
+
+Saving individual fasta files for each protein
+```{r, eval=FALSE}
+# Save individual fasta files for each protein -----
+keyname_hits <- readRDS(
+  glue("{wkdir}/data/interim/tmp/",
+  "2023-03-09_gget_immport.rds")
+  )
+
+fastas_raw_dir <- glue("{wkdir}/data/interim/fastas/raw/monomers/immport")
+shell_do(glue("mkdir -p {fastas_raw_dir}"))
+for (id in keyname_hits$ensembl_id) {
+  id_aa <- keyname_hits %>%
+    filter(ensembl_id == id) %>%
+    pull(sequences_aa)
+  fasta_path <- glue("{fastas_raw_dir}/{id}.fasta")
+  seqinr::write.fasta(
+    sequences = id_aa,
+    names = id,
+    file.out = fasta_path,
+    open = "w",
+    nbchar = 60,
+    as.string = FALSE
+  )
+}
+```
+
+
+Appling SignalP 6.0 identify and remove signal peptides from FASTAs.
+```{r, eval=FALSE}
+# Using SignalP 6.0 identify and remove signal peptides from fastas
+fastas_raw_dir <- glue("{wkdir}/data/interim/fastas/raw/monomers/immport")
+fastas_raw_paths <-
+  list.files(fastas_raw_dir, pattern = "fasta", full.names = TRUE) %>% 
+  keep(grepl("ENSG", .,))
+
+names(fastas_raw_paths) <- fastas_raw_paths %>%
+  purrr::map(~ fs::path_ext_remove(basename(.)))
+pb <- progress_bar$new(total = length(fastas_raw_paths))
+
+fastas_processed_keyname_hits <- list()
+for (id in names(fastas_raw_paths)) {
+  pb$tick()
+  fasta_path <- fastas_raw_paths[[id]]
+  fastas_processed_keyname_hits[[id]] <- glue(
+    "{wkdir}/data/interim/fastas/processed/monomers/immport/{id}"
+  )
+  output_check <- file.exists(
+    glue("{fastas_processed_keyname_hits[[id]]}/processed_entries.fasta")
+  )
+  if (output_check) {
+    # message("Skipping, file exists: ", name_out, "\n")
+    next
+  }
+  message("Processing ", id, " fasta file...")
+  shell_do(
+    glue(
+      "conda run -n signalp6",
+      " signalp6",
+      " --organism eukarya",
+      " --fastafile {fasta_path}",
+      " --output_dir {fastas_processed_keyname_hits[[id]]}",
+      " --write_procs 4",
+      " --format all",
+      " --mode fast"
+    ))
+}
+
+```
+
+Saving a dataframe containing  SignalP 6.0 trimmed protein sequences.
+
+```{r, eval = FALSE}
+workflow_meta <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-03-22_workflow-meta-3_HmmersearchQC.rds"
+  )
+)
+workflow_meta %<>%
+  mutate(id = glue("{gene_name}_{ensembl_id}"))
+seq_formatted <- list()
+for (gene_id in workflow_meta$id) {
+  message("Processing: ", gene_id)
+  id_data <- workflow_meta %>% filter(id == gene_id)
+  seq_data <- seqinr::read.fasta(
+    id_data$fasta_path_processed,
+    seqtype = "AA"
+  )
+  seq_formatted[[gene_id]] <-
+    seq_data %>%
+      seqinr::getSequence() %>%
+      unlist() %>%
+      paste0(., collapse = "")
+}
+
+seq_df <- seq_formatted %>%
+  enframe(name = "id", value = "sequences_aa_signalp_trimmed") %>%
+  mutate(
+    sequences_aa_signalp_trimmed =
+      as.character(unname(sequences_aa_signalp_trimmed))
+  )
+saveRDS(
+  seq_df,
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "{Sys.Date()}_signalp-trimmed-sequence-df.rds"
+  )
+)
+
+```
+
+Collecting signal peptide metadata
+```{r, eval=FALSE}
+signal6p_pred_paths <- list.files(
+  glue("{wkdir}/data/interim/fastas/processed/monomers/immport"),
+  recursive = TRUE,
+  full.names = TRUE,
+  pattern = "prediction_results.txt"
+)
+
+signal6p_pred <- signal6p_pred_paths %>%
+  purrr::set_names() %>% 
+  purrr::map(
+    ~ read.delim(
+      file = ., sep = "\t", skip = 1,
+    )
+  ) %>%
+  bind_rows(.id = "prediction_path") %>%
+    dplyr::rename(ensembl_id = "X..ID") %>%
+    dplyr::rename_at(
+      vars(prediction_path, Prediction, OTHER, SP.Sec.SPI., CS.Position),
+      ~ paste0("signal6p_", .)
+    )
+
+saveRDS(
+  signal6p_pred,
+  glue("{wkdir}/data/interim/metadata/immport_signal6p_pred.rds")
+)
+```
+
+```{r, eval=FALSE}
+# Data QC Check ----
+keyname_hits <- readRDS(
+  glue("{wkdir}/data/interim/tmp/",
+  "2023-03-09_gget_immport.rds")
+  )
+eids <- keyname_hits$ensembl_id 
+signalp_qc_check <- eids %>% 
+  purrr::map(~ file.exists(
+    glue("{wkdir}/data/interim/fastas/processed/monomers/immport/{.}/processed_entries.fasta")
+  ))
+signalp_qc_check %>% unlist() %>% table()
+# Number of failed runs (rerun chunk above)
+
+
+signalp_qc_check <- eids %>% 
+  purrr::map(~ file.size(
+    glue("{wkdir}/data/interim/fastas/processed/monomers/immport/{.}/processed_entries.fasta")) > 0)
+signalp_qc_check %>% unlist() %>% table()
+# Number of fastas without any signal peptides 555 (continue below) 
+
+# If no signal peptide is found, the fasta file is copied to the processed dir
+for (id in names(fastas_raw_paths)) {
+  raw_fasta <- fastas_raw_paths[[id]]
+  processed_fasta <- glue(
+    "{fastas_processed_keyname_hits[[id]]}/",
+    "processed_entries.fasta"
+    )
+  if (file.info(processed_fasta)$size == 0){
+    message("Overwriting ", id, " processed fasta file...")
+    shell_do(glue("cp {raw_fasta} {processed_fasta}"))
+  }
+}
+
+# Check to see fasta location paths contain sequences
+signalp_qc_check <- eids %>% 
+  purrr::map(~ file.size(
+    glue("{wkdir}/data/interim/fastas/processed/monomers/immport/{.}/processed_entries.fasta")) > 0)
+signalp_qc_check %>% unlist() %>% table()
+
+saveRDS(fastas_processed_keyname_hits, glue(
+  "{wkdir}/data/interim/tmp/",
+  "{Sys.Date()}_fasta-paths_processed_keyname_hits.rds"
+))
+```
+
+## Results 
+
+### Profile Hidden Markov Models (2.0) Hhblits 
+
+```{r, eval=FALSE}
+outdir <- glue("{wkdir}/data/interim/hhblits_results/immport")
+dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
+```
+
+Executing hhblits on immport signalp processed fastas.
+
+```{r, eval = FALSE}
+shell_do_hhblits <- function(
+    fname_list,
+    out_dir,
+    wk = wkdir) {
+  require(glue)
+  require(fs)
+  require(strex)
+  require(magrittr)
+  source(glue("{wk}/notebooks/R-scripts/helpers_general.R"))
+  message(get_time(), ": starting hhblits")
+  for (path in fname_list) {
+    # fname <- fs::path_ext_remove(basename(path))
+    fname <- strex::str_before_last(path, "/") %>%
+      strex::str_after_last("/")
+    if (file.exists(glue("{out_dir}/{fname}.hmm"))) {
+      message(glue("{fname} already exists, skipping..."))
+      next
+    }
+    message(glue("{get_time()} {fname} processing..."))
+    blits_cmds <- glue(
+      "hhblits -cpu 12",
+      " -i {path}",
+      " -d /central/groups/MazmanianLab/joeB/Downloads/RefDBs/",
+      "HHsuite3db/UniRef30_2022_02/UniRef30_2022_02",
+      " -o {out_dir}/{fname}.hhr",
+      " -oa3m {out_dir}/{fname}.a3m",
+      " -n 2", # number of iterations
+      " -diff 1000", # maximum number of sequences to keep in MSA
+      " -id 90", # maximum similarity to input sequence
+      " -neff 10"
+    )
+    shell_do(blits_cmds)
+  }
+}
+
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_HHblits-immport"),
+    memory = "5G",
+    ncpus = 6,
+    walltime = 10800
+  )
+)
+# list signalp trimmed fasta paths
+input_fasta_paths <- list.files(
+  glue("{wkdir}/data/interim/fastas/processed/monomers/immport"),
+  full.names = TRUE,
+  recursive = TRUE,
+  pattern = ".fasta"
+)
+# Chunk files (100 per job) and download
+tic()
+n_jobs <- ceiling(length(input_fasta_paths) / 10)
+future_runs <- listenv()
+for (job in 1:n_jobs) {
+  fnames <- chunk_func(input_fasta_paths, n_jobs)[[job]]
+  future_runs[[job]] %<-% shell_do_hhblits(
+    fnames,
+    out_dir = outdir,
+    wk = wkdir
+  )
+}
+toc()
+```
+
+Filtering HHblits hits to remove redundant sequences for visual QC.
+
+```{r, eval = FALSE}
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_HHblits-MSA-trim"),
+    memory = "5G",
+    ncpus = 1,
+    walltime = 3600
+  )
+)
+# list A3M files and trim to the top 30 most diverse sequences
+a3m_paths <- list.files(outdir, pattern = ".a3m", full.names = TRUE) %>%
+  keep(!grepl("trimD30", .))
+# Chunk files (100 per job) and download
+tic()
+n_jobs <- ceiling(length(a3m_paths) / 5)
+fruns_trim_msa <- listenv()
+for (job in 1:n_jobs) {
+  fnames <- chunk_func(a3m_paths, n_jobs)[[job]]
+  fruns_trim_msa[[job]] %<-% slurm_do_msa_trim(
+    fname_list = fnames,
+    out_dir = outdir,
+    working_dir = wkdir
+  )
+}
+toc()
+```
+
+Plotting MSAs for QC
+
+```{r, eval = FALSE}
+trimmed_msa_paths <- list.files(
+  outdir,
+  pattern = ".trimD30.fasta",
+  full.names = TRUE
+) %>% keep(!file.exists(
+  glue(
+    "{wkdir}/figures/MSA/hhblits-immport-QC/",
+    "{fs::path_ext_remove(basename(.))}.png"
+  )
+))
+
+# Chunk files (10 per job) and download
+n_jobs <- ceiling(length(trimmed_msa_paths) / 2)
+plotmsa_runs <- listenv()
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_PlotMSAQC"),
+    memory = "5G",
+    ncpus = 1,
+    walltime = 36000
+  ),
+  workers = n_jobs
+)
+
+tic()
+for (job in 1:n_jobs) {
+  fasta_path_chunk <- chunk_func(trimmed_msa_paths, n_jobs)[[job]]
+  figure_paths <- fasta_path_chunk %>%
+    purrr::map(~ glue(
+      "{wkdir}/figures/MSA/hhblits-immport-QC/",
+      "{fs::path_ext_remove(basename(.))}.png"
+    )) %>%
+    unlist()
+  plotmsa_runs[[job]] %<-% plot_msa_wrapper(
+    path_list = fasta_path_chunk,
+    output_list = figure_paths
+  )
+}
+toc()
+
+```
+
+Convert full-length A3M files to HMMs for HMMER3 search.
+
+```{r, eval = FALSE}
+# # list A3M files and trim to the top 30 most diverse sequences
+a3m_paths <- list.files(outdir, pattern = ".a3m", full.names = TRUE) %>%
+  keep(!grepl("trimD30", .))
+
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_HHblits-MSA-convert"),
+    memory = "5G",
+    ncpus = 1,
+    walltime = 3600
+  )
+)
+
+# Chunk files (100 per job) and download
+tic()
+n_jobs <- ceiling(length(a3m_paths) / 10)
+fruns_convert_a3m <- listenv()
+for (job in 1:n_jobs) {
+  fnames <- chunk_func(a3m_paths, n_jobs)[[job]]
+  fruns_convert_a3m[[job]] %<-% slurm_do_convert_a3m_msa_hmm(
+    fname_list = fnames,
+    out_dir = outdir,
+    working_dir = wkdir
+  )
+}
+toc()
+
+```
+
+Executing hmmsearch with HMMER3.
+
+```{r, eval = FALSE}
+hmmsearch_dir <- glue("{wkdir}/data/interim/hmmersearch_results/hhblits_pHMMs/immport/")
+dir.create(hmmsearch_dir, showWarnings = FALSE, recursive = TRUE)
+
+```
+
+```{r, eval = FALSE}
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_hmmsearch"),
+    memory = "2G",
+    ncpus = 24,
+    walltime = 108000
+  )
+)
+# list HMM files
+hmm_paths <- list.files(outdir, pattern = ".hmm", full.names = TRUE)
+# Remove HMMs that have already been searched in previous runs
+hmm_paths %<>%
+  keep(!file.exists(glue(
+    "{wkdir}/data/interim/hmmersearch_results/hhblits_pHMMs/immport/",
+    "{gsub('.hmm', '_tblout.txt', basename(.))}"
+  )))
+
+protein_catalog_path <-
+  glue(
+    "{protein_catalogs}/clustered_catalogs/",
+    "merged/2023-02-13_catalog_MMSeq2-95_rep_seq.fasta"
+  )
+# Chunk files (100 per job) and download
+tic()
+n_jobs <- ceiling(length(hmm_paths) / 2)
+hmmsearch_runs <- listenv()
+for (job in 1:n_jobs) {
+  hmm_paths_chunk <- chunk_func(hmm_paths, n_jobs)[[job]]
+  hmmsearch_runs[[job]] %<-% shell_do_hmmsearch(
+    input_paths = hmm_paths_chunk,
+    output_dir = hmmsearch_dir,
+    db_path = protein_catalog_path
+  )
+}
+toc()
+
+# remove files that failed runs and re-run and iterate chunk above with more memory and time
+list.files(
+  glue("{wkdir}/data/interim/hmmersearch_results/hhblits_pHMMs/immport"),
+  full.names = TRUE #, pattern = "_tblout.txt"
+) %>%
+  purrr::set_names() %>%
+    purrr::map(~ file.size(.)) %>%
+    keep(~ . < 1) %>%
+    names() #%>% purrr::map(~ file.remove(.))
+```
+
+
+```{r, eval = FALSE}
+# DOUBLE CHECKING RUNS SUCCEEDED
+hmmer_results_fsizes <- list.files(
+  glue("{wkdir}/data/interim/hmmersearch_results/hhblits_pHMMs/immport"),
+  full.names = TRUE, pattern = "_tblout.txt"
+) %>%
+  purrr::set_names() %>%
+    purrr::map(~ file.size(.)) %>%
+    purrr::map(~ data.frame("file_size" = .)) %>%
+  dplyr::bind_rows(.id = "hmmsearch_path")
+
+hmmer_results_fsizes %>%
+  ggplot(aes(x = file_size)) +
+  scale_x_log10() +
+  geom_density()
+
+```
+
+Aggregate hmmsearch results.
+
+```{r, eval = FALSE}
+hmmer_results_paths <- list.files(
+  glue("{wkdir}/data/interim/hmmersearch_results/hhblits_pHMMs/immport"),
+  full.names = TRUE, pattern = "_tblout.txt"
+  ) %>%
+  keep(file.size(.) > 0)
+
+# load in hmmersearch results
+future::plan("multisession", workers = 12)
+hmmer_results <-
+  hmmer_results_paths %>%
+  purrr::set_names(gsub("_tblout.txt", "", basename(.))) %>%
+  furrr::future_map(~ read_tblout(.) %>% filter(sequence_evalue < 0.05)) %>%
+  bind_rows()
+
+hmmer_results %>% glimpse
+# View(hmmer_results_list)
+saveRDS(
+  hmmer_results,
+  glue(
+    "{wkdir}/data/interim/hmmersearch_results/",
+    "{Sys.Date()}_immport-hhblits-hmmersearch_results.rds"
+  )
+)
+
+```
+
+
+```{r, eval = FALSE}
+workflow_meta <-
+  readRDS(
+    glue(
+      "{wkdir}/data/interim/tmp/",
+      "2023-03-22_workflow-meta-3_HmmersearchQC.rds"
+    )
+  )
+category_df <- readRDS(
+  glue("{wkdir}/data/interim/tmp/2023-06-22_gene-categories-EID-df.rds")
+)
+blastp_sig_ratio_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "2023-07-06_blastp-domain-sig-ratio-df.rds"
+  )
+) %>%
+  mutate(transdomain_blastp_signal = TRUE) %>%
+    dplyr::select(
+      ensembl_id, Bacteria, Eukaryota, mean_neglogeval_ratio_b_ovr_m,
+      transdomain_blastp_signal
+    )
+workflow_meta %<>%
+  dplyr::left_join(category_df) %>%
+  dplyr::left_join(blastp_sig_ratio_df) %>%
+  mutate(
+    transdomain_blastp_signal =
+      if_else(
+        is.na(transdomain_blastp_signal), FALSE, transdomain_blastp_signal
+      )
+  )
+saveRDS(workflow_meta, file = glue(
+  "{wkdir}/data/interim/tmp/",
+  "{Sys.Date()}_workflow-meta-sequence-analysis.rds"
+))
+```
+
+
+Visualizing signficance summary statistics.
+```{r, eval = FALSE}
+hmmer_results <- readRDS(
+  glue(
+    "{wkdir}/data/interim/hmmersearch_results/",
+    "2023-07-05_immport-hhblits-hmmersearch_results.rds"
+  )
+)
+workflow_meta <- readRDS(
+  glue(
+  "{wkdir}/data/interim/tmp/",
+  "{Sys.Date()}_workflow-meta-sequence-analysis.rds"
+  )
+)
+
+hmmer_results_df <- hmmer_results %>%
+  select(-c(domain_accession, query_accession)) %>%
+  mutate(
+    catalog =
+      str_before_nth(domain_name, pattern = "_", n = 2) %>%
+        str_after_first(., "_")
+  ) %>%
+  dplyr::rename(ensembl_id = query_name) %>% 
+  left_join(workflow_meta, by = "ensembl_id")
+# hmmer_results_df %>% glimpse
+
+ranked_evals <- hmmer_results$sequence_evalue %>%
+  unique() %>%
+  sort()
+impt <- ranked_evals[2]/2
+
+hmmer_results_df_statsum <- hmmer_results_df %>%
+  mutate(neglogeval = -log10(sequence_evalue + impt)) %>%
+  group_by(gene_name, catalog) %>%
+  summarize(mean = mean(neglogeval), sd = sd(neglogeval)) %>%
+  dplyr::left_join(workflow_meta, relationship = "many-to-many")
+
+p_statint_all_hits <- hmmer_results_df_statsum %>%
+  ggplot(aes(
+    x = mean,
+    xmin = mean - sd,
+    xmax = mean + sd,
+    y = fct_reorder(gene_name, mean)
+  )) +
+  geom_pointrange(size = 0.2, alpha = 0.3) +
+  theme_light() +
+  facet_grid(transdomain_blastp_signal ~ catalog, 
+    space =  "free", scales = "free_y") +
+  labs(x = "-log10(E-value)", y = NULL) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_blank(),
+    panel.grid = element_blank()
+    )
+
+ggsave(
+  glue(
+    "{wkdir}/figures/hmmersearch/",
+    "{Sys.Date()}_hmmsearch_statintervals-all-hits.png"
+    ),
+  p_statint_all_hits,
+  width = 14, height = 15, dpi = 600
+)
+
+```
+
+
+![pHMM hmmsearch results against the custom microbial catalog. Significance distributions for all human immune genes grouped by sub-catalog of origin (columns), and transdomin detection of genes (rows).](../figures/hmmersearch/2023-07-06_hmmsearch_statintervals-all-hits.png){#fig-hmmsearch-allsig}
+
+**Key Takeaways**
+- Our previous phylogenomic analysis of each ensembl ID has led to useful classification of genes. Nearly all genes classified as having some bacterial homolog show significant hits, across all catalogs including those with only bacterial genomes.
+- When examining results for genes with no obvious bacterial hits, we see that the VEuPathDB, Wormbase, Hadza, and RUMMETA catalogs unsurprisingly show the greatest number of hits, as these catalogs contain Archaea and Euakryota.
+- Protein Catalogs of purely bacterial origin show some low level of significance for certain genes, to be investigated further below.
+
+
+```{r, eval = FALSE}
+hmmer_results_df_bact <- hmmer_results_df %>%
+  filter(transdomain_blastp_signal == FALSE) %>%
+  filter(catalog %in% c("ELGG", "KIJ", "MGV", "RUGS", "UHGP")) %>%
+  mutate(neglogeval = -log10(sequence_evalue + impt))
+
+hmmer_results_df_bact$gene_category
+
+p_category_ridgedensity <- hmmer_results_df_bact %>%
+  filter(gene_category %nin%
+    c(
+      "Cytokines_&_TNF_Family_Members",
+      "Antimicrobials_&_Cytokine_Receptors_&_NaturalKiller_Cell_Cytotoxicity_&_TNF_Family_Members_Receptors",
+      "Antimicrobials_&_Cytokines_&_NaturalKiller_Cell_Cytotoxicity_&_TCRsignalingPathway",
+      "Cytokines_&_TNF_Family_Members"
+    )) %>% 
+  ggplot(aes(
+    neglogeval, fct_reorder(gene_category, neglogeval),
+    fill = catalog)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    jittered_points = TRUE,
+    position = position_points_jitter(height = 0.005, width = 0),
+    point_shape = "|", 
+    point_alpha = 0.3,
+    point_size = 2,
+    alpha = 0.7) +
+    scale_x_log10(labels = scales::comma) +
+      scale_fill_brewer(palette = "Set3") +
+    theme_light() +
+    labs(
+      x = expression(-log[10] ~ "(E-value)"),
+      y = NULL, full = "# Hits") +
+    theme(
+      legend.position = "top",
+      panel.border = element_blank()
+    )
+
+ggsave(
+  glue(
+    "{wkdir}/figures/hmmersearch/",
+    "{Sys.Date()}_hmmersearch_summary_prokaryotic_catalogs.png"
+  ),
+  p_category_ridgedensity,
+  width = 12, height = 12, dpi = 600
+)
+```
+
+![pHMM hmmsearch results. Significance distributions of prokaryotic catalogs, grouped by immune gene categories](../figures/hmmersearch/2023-07-06_hmmersearch_summary_prokaryotic_catalogs.png){#fig-hmmsearch-prok-catalogs}
+
+
+
+## Methods
+
+**hh-suite3**
+hhsuite-linux-avx2.tar.gz (17-May-2022 13:15)
+https://mmseqs.com/hhsuite/ (v3.3.0)
+
+
+**Global Sequence Alignment - Needleman-Wunsch**
 
 In both global and local sequence alignment we utilize the [BLOSUM62](https://www.nature.com/articles/nbt0804-1035) substitution matrix with an affine gap penalty score, $g = o + e * (l-1)$, where $o$ is the gap initiation penalty, $e$ is the gap extension penalty, and $l$ is the length of the gap. We define $o$ as 5, and $e$ as 0.5. These parameters favor sequence alignments with fewer gaps while minimizing penalties for larger insertion domains in our sequences of interest. The Needleman-Wunsch algorithm is defined as follows. Let $X=x_1,x_2,...x_n$ and $Y=y_1, y_2,... y_m$ equal the sequences of $n$ and $m$ lengths to be aligned. A matrix $D(i,j)$ is indexed by residues and built recursively using the following conditions:
 
@@ -43,12 +995,11 @@ D(i,j) = \max\left\{
     D(i, j-1) - g \\
   \end{array}
 \right.
-$$\
+$$
 
 Here $g$ is the gap penalty and , $s(i,j)$ is the similarity score for a pair of residues, provided by the BLOSUM62 substitution matrix.
 
-## Local Sequence Alignment - Smith-Waterman
-
+**Local Sequence Alignment - Smith-Waterman**
 The Smith-Waterman algorithm is very similar to the Needleman-Wunch approach with the exception that unmatched residues are provided a value of zero in recursive development of the scoring matrix.
 
 $$
@@ -62,90 +1013,11 @@ D(i,j) = \max\left\{
 \right.
 $$
 
-## Profile Hidden Markov Models (HMM)
 
-Profile HMMs are probabilistic models that are useful for identifying shared motifs between a model and a sequence. Models are built using multiple sequence alignments, where they record position-specific probabilities of amino-acid conservation [@embl-ebi].
+**profile Hidden Markov Model Analysis**
+profile Hidden Markov Models were created using jackhmmer from HMMER v.3.3, with a maximum of 5 iterations and an E-value threshold of 0.05 against the latest UniProt catalog (as of 2023-03-02). Hidden models were assembled via hmmbuild and hmmsearch was applied against our custom microbial catalog database.
 
-HMM. Each HMM was built from a multiple sequence alignment generated by MUSCLE (MUltiple Sequence Comparison by Log- Expectation)^[76](https://www.nature.com/articles/s41591-019-0406-6#ref-CR76 "Edgar, R. C. MUSCLE: multiple sequence alignment with high accuracy and high throughput. Nucleic Acids Res. 32, 1792–1797 (2004).")^, containing the respective reference sequences and close homologs identified using PSI-BLAST (Position-Specific Iterative Basic Local Alignment Search Tool)^[77](https://www.nature.com/articles/s41591-019-0406-6#ref-CR77 "Altschul, S. F. et al. Gapped BLAST and PSI-BLAST: a new generation of protein database search programs. Nucleic Acids Res. 25, 3389–3402 (1997).")^. Multiple sequence alignments are available together with the code for this study (<https://github.com/zellerlab/crc_meta>). Then, we screened the IGC metagenomic gene catalog^[30](https://www.nature.com/articles/s41591-019-0406-6#ref-CR30 "Li, J. et al. An integrated catalog of reference genes in the human gut microbiome. Nat. Biotechnol. 32, 834–841 (2014).")^ with each HMM using the HMMER software (v.3.1b2)^[78](https://www.nature.com/articles/s41591-019-0406-6#ref-CR78 "Eddy, S. R. Accelerated profile HMM searches. PLoS Comput. Biol. 7, e1002195 (2011).")^. Genes with an e-value below 1 × 10^−10^ were filtered for uniqueness since in some cases the HMMs
-
-## Analysis
-#### Selecting Immune proteins of interest
-
-Analysis setup
-```{r}
-library(tidyverse)
-library(reticulate)
-library(magrittr)
-library(glue)
-library(seqinr)
-library(future)
-library(future.batchtools)
-library(fs)
-library(tictoc)
-library(listenv)
-library(progress)
-tmpdir <- "/central/scratch/jbok/tmp"
-homedir <- "/central/groups/MazmanianLab/joeB"
-wkdir <- glue(
-  "{homedir}/",
-  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
-)
-src_dir <- glue("{wkdir}/notebooks")
-source(glue("{src_dir}/R-scripts/helpers_general.R"))
-source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
-protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs")
-reticulate::use_condaenv(condaenv = 'pdmbsR',  required = TRUE)
-```
-
-https://www.innatedb.com/redirect.do?go=resourcesGeneLists
-
-Immunogenetic Related Information Source (IRIS)
-This gene list, of 1,535 immune genes (December 7, 2014), is derived from the IRIS online database of known human defense genes (note that the IRIS database does not seem to be available anymore).
-These genes were curated by IRIS from the literature where an immune gene was defined as a complete gene that produces a functional transcript and demonstrates at least one of the following defense characteristics: (i) Known or putative function in innate or adaptive immunity, (ii) Participates in the development or maturation of immune system components (iii) Induced by immunomodulators, (iv) Encodes a protein expressed primarily in immune tissues, (v) Participates in an immune pathway that results in the expression of defense molecules, (vi) Produces a protein that interacts directly with pathogens or their products.View List
-
-Septic Shock Group
-This gene list is derived from the Septic Shock group which is a collaboration between ISB, TSRI and Rockefeller University research groups.
-The list includes 1,448 genes with potential relevance to macrophage response to microbial stimulation (December 7, 2014). The list combines genes with significant expression changes under stimulation with LPS, and genes coding for proteins known to interact in the TNFa/NF-kB signaling pathway.View List
-
-Immunome Database
-Immunology-related genes were collected from research articles, textbooks and electronic information sources. The list contains genes that are directly involved in immunological processes. In addition to clearly defined groups, such as clusters of differentiation (CD) molecules, chemokines and their receptors, other essential genes were included. Genes were included when they are undoubtedly needed for immunity. Immunodeficiency-related genes were taken from the ImmunoDeficiency Resource and IDbases. Proteins that are expressed in nearly all cells were excluded, although their functions may also be needed in immunity related cells and tissues. Only full-length genes were included; thus, the gene segments of immunoglobulins, B and T cell receptors and major histocompatibility complexes (MHCs) were excluded. In the case of signaling molecules, only those involved in immunity-related cascades were included. Altogether, 844 genes were selected for InnateDB (December 7, 2014).
 
 ```{r}
-
-
-
-```
-
- 
-```{r}
-gget <- import("gget")
-proteins_of_interest <- c("interleukin", "interferons", "TGFB", "TNFA")
-keyname_search <- gget$search(proteins_of_interest, "homo_sapiens")
-keyname_hits <- keyname_search %>% filter(biotype == "protein_coding") %>% 
-  filter(gene_name %in% c("IL1RN", "IL4", "IL6", "IL10", "IL11", "IL13"))
-
-# collect amino acid sequences for each protein using the ensembl_id
-gget_seq <- function(ensembl_id,  amino_acid=TRUE){
-    seq_results <- gget$seq(ensembl_id, translate = amino_acid)
-    return(seq_results[2])
-}
-keyname_hits %<>% mutate(sequences_aa =  map_chr(ensembl_id, gget_seq))
-keyname_hits
-
-saveRDS(keyname_hits, glue("{wkdir}/data/interim/tmp/{Sys.Date()}_gget_proteins-of-interest.rds"))
-
-```
-
-
-## Methods
-
-All analysis are conducted using R 4.2.0, using the packages specified below. The Needleman-Wunsch and Smith-Waterman algorithm were applied using [emboss](https://anaconda.org/bioconda/emboss) v6.6.0.
-
-Seq. clustering ..
-
-HMM analysis ..
-
-```{r}
-
 sessionInfo()
 ```

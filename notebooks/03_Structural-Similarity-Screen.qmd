@@ -1,0 +1,2344 @@
+---
+title: "Structural Similarity Screen"
+editor: visual
+author: "Joe Boktor"
+date: '2023-04-18'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+    grid:
+      sidebar-width: 300px
+      body-width: 900px
+      margin-width: 300px
+      gutter-width: 1.5rem
+bibliography: references.bib
+---
+
+# Objectives
+In this analysis we will leverage available protein structures of our targets of interest alongside the ESM database of folded metagenomic sequences to identify homologous structural elements across human immune proteins and the microbial protein universe.
+
+We will gather structural data for human immune genes from two sources:
+
+1. The RCSB PDB database
+2. AlphaFold2 generated structures 
+
+### Setup
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(bio3d)
+library(protr)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(strex)
+library(data.table)
+library(kableExtra)
+# Plotting functions
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+library(plotly)
+library(ggsci)
+library(viridis)
+library(ggforce)
+library(seriation)
+# protein structure analysis
+library(bio3d)
+library(r3dmol)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+"{homedir}/Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+source(glue("{src_dir}/R_scripts/helpers_pdb-wrangling.R"))
+protein_catalogs <- glue("{homedir}/Downloads/protein_catalogs")
+# 1.5gb  limit (1500*1024^2 = 1572864000)
+options(future.globals.maxSize= 1572864000)
+```
+
+```{mermaid, column: screen}
+%%| column: page
+%%| fig-height: 15
+flowchart TB
+subgraph Quality_Control_Filtering
+  A(FoldSeek Results) --> |--RefSeq taxid filter \nBacteria/Archaea/\nFungi/Viruses| Bpre(FoldSeek Results\n select taxa)
+  Bpre --> |--lddt > 0.5 \n--alntmscore > 0.3 \n--evalue<0.05 \n--prob>0.9| B(Quality Filtered \nStructural Hits)
+end
+  subgraph Query_Target_filtering
+    B -->  |signal peptide filter \nSignalP6| C(Secreted Hits)
+  B -->  D(Top 20 mean & max hits \nper database)
+  C -->  E(Top 20 mean & max \nsecreted hits \nper database)
+  C -->  F(All Secreted \n Cytokines / Chemokines)
+  D --> G(Human genes \nof interest)
+  E --> G
+  F --> G
+  G --> |Select top 20 Targets\nper Query-DB by LDDT| H(Microbial Mimetic \nQueries \n n=4,783 PDBs)
+  end
+  subgraph Human_Microbiome_Relevance_Filter
+  H --> DD_G{DIAMOND\nProtein Search}
+  DD_C[(UHGG Species \n n=4,744 genomes)] --> DD_G
+  style DD_C fill:#C8D1F7
+  DD_E[(UHGP-95 \n Protein Catalog \n 20+ million seqs)] -->  DD_G
+  style DD_E fill:#C8D1F7
+  DD_F[(hCom2 \n Synthetic Human Gut \n Microbiome \n n=200 genomes)] --> DD_G
+  style DD_F fill:#C8D1F7
+  DD_G --> DD_D(Human Microbiome \n Microbial Mimetic \n Candidates)
+end
+  subgraph Foldseek_Workflow
+    A1(Human Immune \nGenes) --> |PDB Search| B1(RCSB PDBs \n *experimental)
+    A1(Human Immune \nGenes) --> |PDB Search| B2(AlphaFold2 UniProt PDBs \n*AI-generated)
+    DB1(ESMAtlas30) --> DB[(FoldSeek \nStructure DBs)]
+    DB2(AlphaFold50) --> DB
+    DB --> AN1{foldseek \neasy-search}
+    B1 --> AN1
+    B2 --> AN1
+    AN1 --> A
+  end
+  classDef blue fill:#EEF2EE
+  class Quality_Control_Filtering blue
+  class Query_Target_filtering blue
+  class Human_Microbiome_Relevance_Filter blue
+  class Foldseek_Workflow blue
+
+```
+
+
+### Downloading RCSB PDBs
+Sourcing python scripts with functions to query the RCSB PDB database for protein structures matching a given sequence and download a PDB from the database.
+```{r, eval = FALSE}
+reticulate::use_condaenv(condaenv = "pdmbsR", required = TRUE)
+source_python(glue("{src_dir}/python-scripts/rcsb_pdb_download.py"))
+```
+
+Using protein sequences of our target genes, we will query the RCSB PDB database for structures with a matching sequence. We will then download the PDB files for each of the hits.
+
+```{r}
+seq_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-04-26_signalp-trimmed-sequence-df.rds"
+  )
+)
+```
+
+```{r, eval = FALSE}
+pb <- progress::progress_bar$new(
+  total = length(seq_df$id),
+  format = "[:bar] :percent eta: :eta"
+)
+
+pdb_hits <- list()
+rcsb_search <- list()
+for (gene_id in seq_df$id) {
+  pb$tick()
+  id_data <- seq_df %>% filter(id == gene_id)
+  rcsb_search[[gene_id]] <- try({
+    rcsb_seq_search(id_data$sequences_aa_signalp_trimmed)
+  }, silent = TRUE)
+  if (class(rcsb_search[[gene_id]]) == "try-error") {
+    message("\nNo hits: ", gene_id)
+  } else {
+    message("\nProcessing: ", gene_id)
+    pdb_hits[[gene_id]] <- rcsb_search[[gene_id]] %>%
+      enframe() %>%
+      unnest_wider(value)
+  }
+}
+
+pdb_hits_df <- pdb_hits %>%
+  bind_rows(.id = "id")
+saveRDS(
+  pdb_hits_df,
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "{Sys.Date()}_RCSB-sequence-search_pdb-hits.rds"
+  )
+)
+saveRDS(
+  rcsb_search,
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "{Sys.Date()}_RCSB-sequence-search_request-results.rds"
+  )
+)
+
+```
+
+```{r}
+# table containing PDB identifiers for each gene and the alignment score of the hit
+pdb_hits_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "2023-04-18_RCSB-sequence-search_pdb-hits.rds"
+  )
+)
+
+```
+
+
+864 genes have at least one RCSB PDBs, and 364 genes with no documented PDB in RCSB.
+```{r}
+#| warning: false
+
+# Viewing number of sequences wtih no documented PDB in RCSB
+rcsb_hits_df <- full_join(seq_df, pdb_hits_df)
+rcsb_hits_df %>%
+  mutate(rcsb_files_available = !is.na(score)) %>%
+  select(id, rcsb_files_available) %>% 
+  distinct() %>% 
+  pull(rcsb_files_available) %>%
+  table()
+
+```
+
+Of the 864 genes with PDBs, how many have multiple PDBs?
+The majority of samples have 10 PDBs, only 159 of the 864 have exactly 1 PDB.
+```{r}
+#| warning: false
+
+pdb_hits_df %>%
+  group_by(id) %>%
+  summarize(n = n()) %>%
+  ggplot(aes(x = n)) +
+  labs(x = "Number of available RCSB PDBs", y = "Number of genes") +
+  theme_bw() +
+  geom_histogram(aes(x = n))
+```
+
+Downloading PDB files
+```{r, eval = FALSE}
+# downloading pdb files -----
+pb <- progress::progress_bar$new(
+  total = length(pdb_hits_df$identifier),
+  format = "[:bar] :percent eta: :eta"
+)
+rcsb_path <- glue("{wkdir}/data/interim/pdb_files/rcsb")
+download_message <- list()
+for (i in 1:nrow(pdb_hits_df)) {
+  gene_id <- pdb_hits_df[i, "id"][[1]]
+  pdb <- pdb_hits_df[i, "identifier"][[1]]
+  pb$tick()
+  if (file.exists(glue("{rcsb_path}/{gene_id}/{pdb}.pdb"))) {
+    next
+  }
+  download_message[[glue("{gene_id}_{pdb}")]] <- try({
+    rcsb_download_pdb(
+      pdb_id = pdb,
+      output_dir = glue("{wkdir}/data/interim/pdb_files/rcsb/{gene_id}")
+    )
+  })
+}
+```
+
+Next, we will need to determine which chains within our RCSB sourced PDB files are a match to our target of interest, as these files can contain complex structures. Here we compare the sequence of our target to the sequences of each chain within the PDB file, and record the alignment score. We will use the highest scoring chain as our target of interest.
+
+```{r, eval = FALSE}
+
+# Example list of file paths to PDB files
+pdb_paths <- list.files(
+  glue("{wkdir}/data/interim/pdb_files/rcsb"),
+  full.names = TRUE,
+  recursive = TRUE,
+  pattern = ".pdb"
+)
+trimmed_seqs <- readRDS(
+  glue("{wkdir}/data/interim/tmp/2023-04-26_signalp-trimmed-sequence-df.rds")
+)
+rcsb_pdb_df <- data.frame("pdb_path" = pdb_paths) %>%
+  mutate(
+    id = strex::str_before_last(pdb_path, "/") %>% str_after_last(., "/"),
+    ensembl_id = str_after_first(id, "_")
+  ) %>%
+  left_join(trimmed_seqs)
+
+pb <- progress_bar$new(total = nrow(rcsb_pdb_df))
+rcsb_aln_df <- tibble()
+for (i in 1:nrow(rcsb_pdb_df)) {
+  pb$tick()
+  rcsb_df <- rcsb_pdb_df[i, ]
+  ref_seq <- rcsb_df$sequences_aa_signalp_trimmed
+  p <- bio3d::read.pdb(rcsb_df$pdb_path)
+  for (c in unique(p$atom$chain)) {
+    chain_seq <- bio3d::pdbseq(
+      p, inds = atom.select(p, "calpha", chain = c), aa1 = TRUE) %>%
+      unname() %>%
+        paste0(collapse = "")
+    aln_global <- protr::twoSeqSim(chain_seq, ref_seq,
+      type = "global", submat = "BLOSUM62"
+    )
+    aln_local <- protr::twoSeqSim(chain_seq, ref_seq,
+      type = "local", submat = "BLOSUM62"
+    )
+    rcsb_aln_df %<>% bind_rows(tibble(
+      "id" = rcsb_df$id,
+      "pdb_path" = rcsb_df$pdb_path,
+      "chain" = c,
+      "global_score" = aln_global@score,
+      "local_score" = aln_local@score
+    ))
+  }
+}
+saveRDS(
+  rcsb_aln_df,
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "{Sys.Date()}_RCSB-chain-target-global-alignment.rds"
+    )
+)
+
+```
+
+
+### Downloading AF2 PDBs
+
+Use ensembl IDs to query UniProt for paired accession IDs.
+
+```{r, eval = FALSE}
+# save a list of ENSEMBL ID's
+library(reticulate)
+gget <- import("gget")
+workflow_meta <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-03-22_workflow-meta-3_HmmersearchQC.rds"
+  )
+)
+eids <- unique(workflow_meta$ensembl_id)
+gget_eid_info <- gget$info(as.list(eids))
+saveRDS(
+  gget_eid_info,
+  glue("{wkdir}/data/interim/tmp/{Sys.Date()}_gget_eid_info.rds")
+)
+
+```
+
+Download AF2 PDBs from the Structure Database.
+```{r, eval = FALSE}
+gget_eid_info <- readRDS(
+  glue("{wkdir}/data/interim/tmp/2023-05-06_gget_eid_info.rds")
+)
+
+uniprot_acc_df <- gget_eid_info %>%
+  mutate(ensembl_id = strex::str_before_first(ensembl_id, "\\.")) %>%
+  select(ensembl_id, ensembl_gene_name, uniprot_id) %>%
+  unnest(uniprot_id) %>%
+  mutate(id = glue("{ensembl_gene_name}_{ensembl_id}"))
+
+for (i in 1:nrow(uniprot_acc_df)){
+  wdf <- uniprot_acc_df[i, ]
+  message("id: ", wdf$id, " ", unlist(wdf$uniprot_id))
+  id <- wdf$id
+  uid <- wdf$uniprot_id
+  link <- glue("https://alphafold.ebi.ac.uk/files/AF-{uid}-F1-model_v4.pdb")
+  outdir <- glue("{wkdir}/data/interim/pdb_files/af2/{id}/")
+  shell_do(glue("mkdir -p {outdir}"))
+  shell_do(glue("wget {link} -P {outdir}"))
+}
+
+```
+
+# FoldSeek Analysis
+Building Foldseek Databases
+
+```{r, eval = FALSE}
+# Alphafold/Proteome
+shell_do(glue("foldseek databases Alphafold/Proteome Alphafold_UniProt/foldseek_Alphafold_UniProt tmp --threads 4"))
+# Alphafold/UniProt
+shell_do(glue("foldseek databases Alphafold/UniProt Alphafold_UniProt/foldseek_Alphafold_UniProt tmp --threads 4"))
+# AFDB50
+shell_do(glue("foldseek databases Alphafold/UniProt50 Alphafold_UniProt50/foldseek_Alphafold_UniProt50 tmp --threads 4"))
+# Alphafold/Swiss-Prot
+shell_do(glue("foldseek databases Alphafold/Swiss-Prot SwissProt/foldseek_SwissProt tmp --threads 4"))
+# ESM
+shell_do(glue("foldseek databases ESMAtlas30 ESMAtlas30/foldseek_ESMAtlas30 tmp --threads 4"))
+# PDB
+shell_do(glue("foldseek databases PDB PDB/foldseek_PDB tmp --threads 4"))
+
+```
+
+Generate output paths and create batch submission data frame.
+
+```{r}
+fsk_dbs <-  "/central/groups/MazmanianLab/joeB/Downloads/RefDBs/foldseekDBs"
+input_db_list <-
+  list(
+    glue("{fsk_dbs}/Alphafold_Proteome/Alphafold_Proteome"),
+    glue("{fsk_dbs}/SwissProt/foldseek_Alphafold_SwissProt"),
+    glue("{fsk_dbs}/PDB/foldseek_PDB"),
+    glue("{fsk_dbs}/ESMAtlas30/foldseek_ESMAtlas30"),
+    glue("{fsk_dbs}/Alphafold_UniProt50/foldseek_Alphafold_UniProt50")
+    # glue("{fsk_dbs}/Alphafold_UniProt/foldseek_Alphafold_UniProt")
+  )
+threads <- 8
+output_params_base <- glue(
+  "query,target,fident,alnlen,mismatch",
+  ",qstart,qend,tstart,tend,evalue,bits,prob,lddt,alntmscore"
+)
+db_params <- list(
+  "foldseek_ESMAtlas30" =
+    list(
+      output_params = output_params_base,
+      taxon_flag = ""
+    ),
+  "Other" =
+    list(
+      output_params = glue(output_params_base, ",taxid,taxname"),
+      taxon_flag = " --taxon-list 2,4751,2157,10239"
+    )
+)
+pdb_dirs <- c(
+ list.files(glue("{wkdir}/data/interim/pdb_files/rcsb"), full.names = TRUE),
+ list.files(glue("{wkdir}/data/interim/pdb_files/af2"), full.names = TRUE)
+)
+```
+
+```{r, eval = FALSE}
+pb  <- progress::progress_bar$new(
+  format = "[:bar] :percent eta: :eta",
+  total = length(pdb_dirs)
+)
+batch_input_df <- data.frame()
+for (pdb_dir in pdb_dirs) {
+  pb$tick()
+  target <- basename(pdb_dir)
+  pdb_paths <- list.files(pdb_dir, full.names = TRUE)
+  for (pdb_path in pdb_paths) {
+    pdb_target_name <- fs::path_ext_remove(basename(pdb_path))
+    for (DB in input_db_list) {
+      db_name <- basename(DB)
+      output_name <- glue("{pdb_target_name}_{db_name}.m8")
+      output_dir <- glue(
+        "{wkdir}/data/interim/foldseek_results/",
+        "2023-07-22_easysearch/{target}/{pdb_target_name}"
+      )
+      # skip if output already exists
+      if (file.exists(glue("{output_dir}/{output_name}"))) {
+        next
+      }
+      dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+      # message("Processing: ", output_name)
+      if (db_name == "foldseek_ESMAtlas30") {
+        taxon_flag <- db_params[["foldseek_ESMAtlas30"]]$taxon_flag
+        output_params <- db_params[["foldseek_ESMAtlas30"]]$output_params
+      } else {
+        taxon_flag <- db_params[["Other"]]$taxon_flag
+        output_params <- db_params[["Other"]]$output_params
+      }
+      batch_input_df %<>%
+        bind_rows(
+          as_tibble_row(list(
+            "pdb_path" = pdb_path,
+            "database_path" = DB,
+            "output_path" = glue("{output_dir}/{output_name}"),
+            "threads" = threads,
+            "params" = output_params,
+            "taxon_flag" = taxon_flag
+          ))
+        )
+    }
+  }
+}
+
+batch_input_df %<>% mutate(format = "")
+batch_input_df %>% glimpse
+```
+
+Executing FoldSeek on PDB files
+```{r, eval = FALSE}
+run_foldseek_easysearch <- function(pdb_path,
+                                   database_path,
+                                   output_path,
+                                   threads,
+                                   params,
+                                   taxon_flag,
+                                   format = "") {
+  require(glue)
+  source(glue(
+    "/central/groups/MazmanianLab/joeB/",
+    "Microbiota-Immunomodulation/Microbiota-Immunomodulation/",
+    "notebooks/R-scripts/helpers_general.R"
+  ))
+  id <- basename(output_path)
+  message("Processing: ", id)
+
+  if (!file.exists(output_path)) {
+    message("Running Foldseek easy-search on: ", id)
+    foldseek_cmd <- glue(
+      "conda run -n foldseek_mamba",
+      " foldseek easy-search",
+      " {pdb_path} {database_path} {output_path}",
+      " /central/groups/MazmanianLab/joeB/tmp/{basename(output_path)}",
+      " --threads {threads}",
+      " --format-output {params}",
+      "{taxon_flag}",
+      "{format}"
+    )
+    shell_do(foldseek_cmd)
+  } else {
+    message("Foldseek output already exists: ", id)
+  }
+}
+
+```
+
+Submitting FoldSeek Jobs on Cluster
+
+```{r, eval = FALSE}
+batch_input_df %>% glimpse
+batch_runs <- batch_input_df #%>%
+  # filter(grepl("foldseek_ESMAtlas30", database_path) | grepl("foldseek_Alphafold_UniProt50", database_path))
+batch_runs %>% glimpse
+
+# configure registry ----
+cluster_run <- glue("{get_time()}_FoldSeek/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.01,
+  fs.latency = 1
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = run_foldseek_easysearch,
+  args = batch_runs,
+  reg = breg
+)
+submitJobs(jobs,
+  resources = list(
+    walltime = 7200,
+    memory = 14000,
+    ncpus = 8,
+    max.concurrent.jobs = 9999
+  )
+)
+
+```
+
+### Visualizing FoldSeek Results
+
+Agggregating FoldSeek Results for each database.
+```{r, eval = FALSE}
+database_names <-
+  c(
+    "_foldseek_ESMAtlas30",
+    "_foldseek_Alphafold_SwissProt.m8",
+    "_foldseek_PDB.m8",
+    "_Alphafold_Proteome.m8",
+    "_foldseek_Alphafold_UniProt50"
+  )
+
+foldkseek_results_paths <- list.files(
+  glue("{wkdir}/data/interim/foldseek_results/2023-07-22_easysearch"),
+  full.names = TRUE,
+  recursive = TRUE,
+  pattern =  ".m8"
+)
+
+for (db in database_names) {
+  message(db)
+    foldkseek_results_paths %>%
+      keep(grepl(db, .)) %>%
+      length() %>%
+      print()
+}
+
+possibly_read_delim <- possibly(.f = read.delim, otherwise = NULL)
+future::plan(multisession,  workers=24)
+for (db in database_names) {
+  message("Loading: ", db)
+  tic()
+  foldseek_results <-
+    foldkseek_results_paths %>%
+    keep(grepl(db, .)) %>%
+    purrr::set_names() %>%
+    furrr::future_map(
+      ~ possibly_read_delim(., sep = "\t", header = FALSE)) %>%
+    bind_rows(.id = "id")
+  if (db == "_foldseek_ESMAtlas30") {
+    colnames(foldseek_results) <-
+      unlist(strsplit(glue("id,", output_params_base), ","))
+  } else {
+    colnames(foldseek_results) <-
+      unlist(strsplit(glue("id,", output_params_base, ",taxid,taxname"), ","))
+  }
+  foldseek_results %<>%
+    as.data.table() %>%
+    mutate(gene_target_id =
+      strex::str_before_nth(id, "/", -2) %>%
+      strex::str_after_last("/"))
+  saveRDS(
+    foldseek_results,
+    glue(
+      "{wkdir}/data/interim/foldseek_results/",
+      "{Sys.Date()}_{db}_results_df.rds"
+    )
+  )
+  toc()
+}
+
+```
+
+
+Loading in and processing FoldSeek Results
+
+1. Trimming Foldseek results to include hits to only chains of interest in RCSB PDB sources and remove any unwanted eukaryotic clades from results
+
+```{r, eval = FALSE}
+# Formatting Taxid metadata
+taxadump_dir <-
+  glue(
+    "{wkdir}/data/interim/refseq_genomes/",
+    "genus_sampling/download/taxdump"
+  )
+
+# from : glue("{taxadump_dir}/division.dmp"),
+tax_div <- tribble(
+  ~division_id, ~division_name,
+  0, "Bacteria",
+  1, "Invertebrates",
+  2, "Mammals",
+  3, "Phages",
+  4, "Plants and Fungi",
+  5, "Primates",
+  6, "Rodents",
+  7, "Synthetic and Chimeric",
+  8, "Unassigned",
+  9, "Viruses",
+  10, "Vertebrates",
+  11, "Environmental samples"
+)
+tax_nodes <- read.delim(
+  glue("{taxadump_dir}/nodes.dmp"),
+  header = FALSE,
+  sep = "\t"
+)
+# remove | delimiter from tax_nodes
+tax_nodes %>% glimpse
+tax_nodes <- tax_nodes[, (1:length(colnames(tax_nodes)) %% 2 == 1)]
+node_defs <-
+  list(
+    tax_id = "node id in GenBank taxonomy database",
+    parent_tax_id = "parent node id in GenBank taxonomy database",
+    rank = "rank of this node (superkingdom, kingdom, ...)",
+    embl_code = "locus-name prefix; not unique",
+    division_id = "see division.dmp file",
+    inherited_div_flag = "1 if node inherits division from parent",
+    genetic_code_id = "see gencode.dmp file",
+    inherited_GC_flag = "1 if node inherits genetic code from parent",
+    mitochondrial_genetic_code_id = "see gencode.dmp file",
+    inherited_MGC_flag = "1 if node inherits mitochondrial gencode from parent",
+    GenBank_hidden_flag = "1 if name is suppressed in GenBank entry lineage",
+    hidden_subtree_root_flag = "1 if this subtree has no sequence data yet",
+    comments = "free-text comments and citations"
+  )
+
+colnames(tax_nodes) <- names(node_defs)
+tax_nodes %<>%
+  dplyr::left_join(tax_div)
+
+saveRDS(
+  tax_nodes,
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "RefSeq-GenBank-taxid-metadata.rds"
+  )
+)
+
+```
+
+
+```{r, eval = FALSE}
+# this section is an alternative to the code block above that more specifically selects Fungi, Bacteria, and Archaea, and Viruses
+
+ncbi_lineages <- read.delim(
+  glue(
+    "/central/groups/MazmanianLab/joeB/Downloads/",
+    "2023-08-02_ncbi-taxdump/fullnamelineage.dmp"
+  ),
+  quote = "",
+  header = FALSE
+) %>%
+  select(-c(V2, V4, V6)) %>%
+    dplyr::rename(taxid = V1, name = V3, lineage = V5) %>%
+    mutate(lineage = case_when(
+      grepl("Viruses", lineage) ~ paste0("Viruses; ", lineage),
+      TRUE ~ lineage
+    ))
+
+ncbi_lineages_df <- ncbi_lineages %>%
+  as.data.table() %>%
+  tidyr::separate(lineage,
+    into =
+    c("L1", "L2", "L3", "L4", "L5", "L6", "L7",
+    "L8", "L9", "L10", "L11", "L12", "L13", "L14"),
+    sep = "; ",
+    remove = FALSE
+  )
+
+lineages_of_interest <- ncbi_lineages_df %>%
+  filter(
+    L2 %in% c("Archaea", "Bacteria") |
+      L1 == "Viruses" | L4 == "Fungi"
+  )
+
+taxids_of_interest <- lineages_of_interest %>%
+  pull(taxid)
+
+saveRDS(
+  taxids_of_interest,
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "ncbi-taxdump-taxids-of-interest.rds"
+  )
+)
+saveRDS(
+  lineages_of_interest,
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "ncbi-taxdump-taxids-of-interest-df.rds"
+  )
+)
+```
+
+```{r, eval = FALSE}
+# chain targets
+rcsb_aln_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "2023-08-07_RCSB-chain-target-global-alignment.rds"
+  )
+)
+rcsb_chain_targets <- rcsb_aln_df %>%
+  group_by(pdb_path) %>%
+  slice_max(order_by = global_score, n = 1, with_ties = FALSE) %>%
+  mutate(
+    pdb_chain =
+      glue("{strex::str_after_last(pdb_path, '/')}_{chain}")
+  )
+af2_paths_df <- tibble(
+  "pdb_path" = list.files(
+    glue("{wkdir}/data/interim/pdb_files/af2"),
+    full.names = TRUE,
+    recursive = TRUE
+  )
+  ) %>% 
+  mutate(id = strex::str_before_last(pdb_path, "/") %>%
+    str_after_last("/"))
+
+query_pdb_paths <- bind_rows(
+  rcsb_chain_targets,
+  af2_paths_df
+) %>%
+  select(-c(local_score, global_score))
+
+saveRDS(
+  query_pdb_paths,
+  glue("{wkdir}/data/interim/foldseek_results/{Sys.Date()}_query_pdb_paths.rds")
+)
+```
+
+```{r,  eval = FALSE}
+microbial_taxids <- readRDS(
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "ncbi-taxdump-taxids-of-interest.rds"
+  )
+)
+# microbial_taxids <- readRDS(
+#   glue(
+#     "{wkdir}/data/interim/phylogenetic_analysis/",
+#     "RefSeq-GenBank-taxid-metadata.rds"
+#   )) %>%
+#   filter(division_id %in% c(0, 3, 4, 9)) %>%
+#   pull(tax_id) %>%
+#   unique()
+
+foldseek_res_paths <- list.files(
+  glue("{wkdir}/data/interim/foldseek_results"),
+  full.names = TRUE
+  ) %>%
+  keep(grepl("2023-07-24", .)) %>%
+  keep(!grepl("ESMAtlas30", .)) %>% 
+  keep(!grepl("_chain-and-taxid-trimmed", .))
+
+# NOTE: proper chain pairing still needs to be done after this section
+future::plan(multisession,  workers=12)
+tic()
+foldseek_res <- foldseek_res_paths %>%
+    purrr::set_names(
+      basename(.) %>%
+        strex::str_after_first(., "__") %>%
+        str_remove(., ".m8.*")
+    ) %>%
+    purrr::map(
+      ~ readRDS(.) %>%
+        filter(grepl("F1-model_v4", query) |
+          toupper(query) %in% toupper(rcsb_chain_targets$pdb_chain)) %>%
+        filter(taxid %in% microbial_taxids) %>%
+        mutate(pdb_source = case_when(
+          grepl("F1-model_v4", query) ~ "AF2",
+          TRUE ~ "RCSB"
+        ))
+    )
+toc()
+tic()
+foldseek_res[["ESMAtlas30"]] <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-07-24__foldseek_ESMAtlas30_results_df.rds"
+  )
+  ) %>%
+  filter(grepl("F1-model_v4", query) |
+    toupper(query) %in% toupper(rcsb_chain_targets$pdb_chain)) %>% 
+  mutate(pdb_source = case_when(
+    grepl("F1-model_v4", query) ~ "AF2",
+    TRUE ~ "RCSB"
+  ))
+toc()
+saveRDS(
+  foldseek_res, glue(
+  "{wkdir}/data/interim/foldseek_results/",
+  "{Sys.Date()}_foldseek_results_chain-and-taxid-trimmed.rds"
+))
+
+```
+
+
+
+```{r, eval = FALSE}
+esm_results_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-05-07_ESMAtlas30_foldseek_results_df.rds"
+  )
+)
+# chains targets
+rcsb_aln_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "2023-05-06_RCSB-chain-target-alignment.rds"
+  )
+)
+rcsb_chain_targets <- rcsb_aln_df %>%
+  group_by(pdb_path) %>%
+  slice_max(score) %>%
+  mutate(
+    pdb_chain =
+      glue("{strex::str_after_last(pdb_path, '/')}_{chain}")
+  )
+
+# filter for chains of interest from RCSB files
+esm_results_df %<>%
+  filter(grepl("F1-model_v4", query) |
+    toupper(query) %in% toupper(rcsb_chain_targets$pdb_chain)) %>% 
+  mutate(pdb_source = case_when(
+    grepl("F1-model_v4", query) ~ "AF2",
+    TRUE ~ "RCSB"
+  ))
+
+# esm_results_df %>% glimpse
+```
+
+
+What metrics are most useful for identifying targets? alntmscore, lddt, e-value, probability?
+
+```{r, eval = FALSE}
+#| warning: false
+
+library(GGally)
+esm_results_df_subsamp <- esm_results_df %>%
+  group_by(query) %>%
+  slice_sample( n = 20, with_ties = FALSE) %>%
+  arrange(prob)
+
+p_corr <- esm_results_df_subsamp %>%
+  ungroup() %>%
+  filter(prob > 0.3) %>%
+  mutate(neg_log_evalue = -log10(evalue)) %>%
+  select(fident, alnlen, neg_log_evalue, bits, prob, lddt, alntmscore) %>%
+  ggpairs(
+    title = "FoldSeek Metrics",
+    upper = list(continuous = "density", combo = "box_no_facet"),
+    lower = list(
+      continuous = wrap("points", alpha = 0.3),
+      combo = wrap("dot_no_facet", alpha = 0.3)
+    )
+  )
+
+ggsave(
+  file = glue("{wkdir}/figures/foldseek/foldseek_metrics_corrs.png"),
+  p_corr,
+  width = 14,
+  height = 14
+)
+
+```
+
+![Pairwise distributions of foldseek metrics](../figures/foldseek/foldseek_metrics_corrs.png){#fig-metrics-corr}
+
+```{r, eval = FALSE}
+#' random subsample of 10 hit results (probability greater than 0.5 ) for each PDB query, 
+#' a lddt greater than alntmscore is indicative of sections of the protein that have altered in some way
+p_alntm_vs_lddt <- esm_results_df %>%
+  group_by(query) %>%
+  slice_sample( n = 20, with_ties = FALSE) %>%
+  arrange(prob) %>%
+  ggplot(aes(alntmscore, lddt)) +
+  geom_point(size = 0.8, alpha = 0.3, shape = 21) +
+  theme_bw() +
+  # scale_color_viridis_c(option = "H", direction = 1) +
+  geom_smooth(method = "loess", se = FALSE) +
+  coord_fixed() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  labs(x = "Alignment TM Score", y = "lddt") +
+  theme(
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+ggsave(
+  glue("{wkdir}/figures/foldseek/alntmscore-vs-lddt.png"),
+  p_alntm_vs_lddt,
+  width = 10, height = 5
+)
+
+```
+
+
+![Global vs Local Alignment Scores, the majority of hits appear to favor higher global alignment rather than local alignment. Figure displays up to 20 random subsamples for each individual PDB search against the DB](../figures/foldseek/alntmscore-vs-lddt.png){#fig-local-vs-global}
+
+
+How does the distribution of results differ from AF2 structures and RCSB? For each individual target_gene and across the entire dataset
+
+```{r, eval = FALSE}
+
+pb <- progress_bar$new(
+  format = "[:bar] :percent eta: :eta",
+  total = length(unique(esm_results_df$gene_target_id))
+)
+pdf(glue("{wkdir}/figures/foldseek/af2-vs-rcsb.pdf"), width = 7, height = 3.5)
+for (gt in unique(esm_results_df$gene_target_id)) {
+  pb$tick()
+  p <- esm_results_df %>%
+    filter(gene_target_id == gt) %>%
+    ggplot(aes(bits, color = pdb_source)) +
+      geom_density(aes(bits, after_stat(scaled), color = pdb_source)) +
+      labs(title = gt) +
+      geom_rug(alpha = 0.1) +
+      scale_x_log10() +
+      scale_color_d3() +
+      theme_bw()
+  print(p)
+}
+dev.off()
+
+```
+
+```{r, eval = FALSE}
+
+# Similar AF2 + RCSB: 
+# C5_ENSG00000106804
+# CD70_ENSG00000125726
+
+# Different distributions entirely: 
+# CRHR1_ENSG00000120088
+
+# Partially Unique distribution components: 
+# CALCRL_ENSG00000064989
+# CCL20_ENSG00000115009
+# CCL4L2_ENSG00000275313
+
+# Shifted distributions:
+# CD79A_ENSG00000105369
+# CGA_ENSG00000135346
+# CGB7_ENSG00000196337
+
+plot_foldseek_distribution <- function(df, gt_id) {
+  p <- df %>%
+    filter(gene_target_id == gt_id) %>%
+    ggplot(aes(bits, color = pdb_source)) +
+      geom_density(aes(bits, after_stat(scaled), color = pdb_source)) +
+      labs(title = gt_id) +
+      geom_rug(alpha = 0.1) +
+      scale_x_log10() +
+      scale_color_d3() +
+      theme_bw()
+  return(p)
+}
+
+example_dists <- c(
+  "C5_ENSG00000106804",
+  "CD70_ENSG00000125726",
+  "CRHR1_ENSG00000120088",
+  "CRHR1_ENSG00000120088",
+  "CALCRL_ENSG00000064989",
+  "CCL20_ENSG00000115009",
+  "CCL4L2_ENSG00000275313",
+  "CD79A_ENSG00000105369",
+  "CGA_ENSG00000135346",
+  "CGB7_ENSG00000196337"
+)
+
+for (gt in example_dists) {
+  ggsave(
+    glue("{wkdir}/figures/foldseek/af2-vs-rcsb_{gt}.png"),
+    plot = plot_foldseek_distribution(esm_results_df, gt),
+    width = 7, height = 3.5, dpi = 600
+  )
+}
+
+```
+
+Visualizing superimposed AF2 & RCSB structures
+```{r, eval = FALSE}
+# Visualizing AF2 vs RCSB PDB structures
+# chains targets
+rcsb_aln_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "2023-08-07_RCSB-chain-target-global-alignment.rds"
+  )
+)
+rcsb_chain_targets <- rcsb_aln_df %>%
+  group_by(pdb_path) %>%
+  slice_max(global_score, with_ties = FALSE) %>%
+  mutate(
+    pdb_chain =
+      glue("{strex::str_after_last(pdb_path, '/')}_{chain}")
+  )
+
+af2_paths_df <- tibble(
+  "pdb_path" = list.files(
+    glue("{wkdir}/data/interim/pdb_files/af2"),
+    full.names = TRUE,
+    recursive = TRUE
+  )
+  ) %>% 
+  mutate(id = strex::str_before_last(pdb_path, "/") %>%
+    str_after_last("/"))
+
+# Similar AF2 + RCSB: 
+target_list <- c(
+  "C5_ENSG00000106804",
+  # "CD70_ENSG00000125726",
+  # "CRHR1_ENSG00000120088",
+  # "CALCRL_ENSG00000064989",
+  "CCL20_ENSG00000115009",
+  # "CCL4L2_ENSG00000275313",
+  # "CD79A_ENSG00000105369",
+  "CGA_ENSG00000135346" #,
+  # "CGB7_ENSG00000196337"
+)
+
+for (target in target_list) {
+  af_pdb_df <- af2_paths_df %>%
+    filter(id == target)
+  rcsb_pdbs_df <- rcsb_chain_targets %>%
+    filter(id == target)
+
+  af_pdb <- bio3d::read.pdb(af_pdb_df$pdb_path)
+  base_model <- r3dmol() %>%
+    m_add_model(data = m_bio3d(af_pdb)) %>%
+    m_set_style(
+      sel = m_sel(model = 0),
+      style = m_style_cartoon(color = "grey")
+    )
+
+  coln <- if (nrow(rcsb_pdbs_df) > 9) {
+    9
+  } else {
+    nrow(rcsb_pdbs_df)
+  }
+  color_pal <- RColorBrewer::brewer.pal(coln, "YlOrRd")
+  updated_model <- base_model
+
+  for (i in 1:nrow(rcsb_pdbs_df)) {
+    if (i < 9) {
+      rcsb_pdb <- load_trimmed_pdb(
+        rcsb_pdbs_df$pdb_path[i], rcsb_pdbs_df$chain[i]
+      )
+      pdbs_aln <- bio3d::struct.aln(
+        af_pdb, rcsb_pdb,
+        exefile = "msa", max.cycles = 100
+      )
+      rcsb_pdb$xyz <- pdbs_aln$xyz
+      updated_model %<>%
+        m_add_model(data = m_bio3d(rcsb_pdb)) %>%
+        m_set_style(
+          sel = m_sel(model = i),
+          style = m_style_cartoon(color = color_pal[i])
+        ) %>%
+        m_zoom_to()
+    }
+  }
+  saveRDS(updated_model, glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_af2-vs-rcsb-PDB-models_{target}.rds"
+  ))
+}
+
+```
+
+### Comparing distributions of Alphafold2 & RCSB generated results
+::: panel-tabset
+### Similiar
+
+![](../figures/foldseek/af2-vs-rcsb_C5_ENSG00000106804.png)
+
+```{r}
+readRDS(glue("{wkdir}/data/interim/foldseek_results/2023-05-22_af2-vs-rcsb-PDB-models_C5_ENSG00000106804.rds"))
+```
+
+### Partially unique
+![](../figures/foldseek/af2-vs-rcsb_CCL20_ENSG00000115009.png)
+
+```{r}
+readRDS(glue("{wkdir}/data/interim/foldseek_results/2023-05-22_af2-vs-rcsb-PDB-models_CCL20_ENSG00000115009.rds"))
+```
+
+### Different
+![](../figures/foldseek/af2-vs-rcsb_CGA_ENSG00000135346.png)
+
+```{r}
+readRDS(glue("{wkdir}/data/interim/foldseek_results/2023-05-22_af2-vs-rcsb-PDB-models_CGA_ENSG00000135346.rds"))
+```
+:::
+
+## Visualizing Top Foldseek Hits
+Workflow for examining results and selecting targets
+
+```{mermaid}
+%%| fig-width: 5
+flowchart TD
+  A(FoldSeek Results) --> |--lddt > 0.5 \n--alntmscore > 0.3 \n--evalue<0.05 \n--prob>0.9| B(Quality Filtered \nStructural Hits)
+  B -->  |signal peptide filter \nSignalP6| C(Secreted Hits)
+  B -->  D(Top 20 mean & max hits \nper database)
+  C -->  E(Top 20 mean & max \nsecreted hits \nper database)
+  C -->  F(All Secreted \n Cytokines / Chemokines)
+
+```
+
+loading in results and selecting exact chains of interest for further analysis
+```{r, eval = FALSE}
+rcsb_aln_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/pdb_search/",
+    "2023-08-07_RCSB-chain-target-global-alignment.rds"
+  )
+)
+eid_query_chains <- rcsb_aln_df %>%
+  group_by(pdb_path) %>%
+  slice_max(order_by = global_score, with_ties = FALSE, n = 1) %>%
+  ungroup() %>%
+  mutate(
+    pdb_chain =
+      glue("{strex::str_after_last(pdb_path, '/')}_{chain}")
+  ) %>%
+  select(id, pdb_chain) %>%
+  dplyr::rename(gene_target_id = id, query = pdb_chain)
+
+foldseek_res <- readRDS(glue(
+  "{wkdir}/data/interim/foldseek_results/",
+  "2023-08-07_foldseek_results_chain-and-taxid-trimmed.rds"
+))
+
+foldseek_res_df_all_temp <- foldseek_res %>%
+  bind_rows(.id = "foldseek_DB") %>%
+  filter(prob >= 0.9) %>%
+  filter(fident < 1) %>%
+  filter(evalue < 0.05) %>%
+  filter(alntmscore > 0.3) %>%
+  filter(lddt > 0.5) %>%
+  mutate(foldseek_DB = case_when(
+    grepl("Alphafold_Proteome", foldseek_DB) ~
+      "Alphafold Proteome",
+    grepl("foldseek_Alphafold_SwissProt", foldseek_DB) ~
+      "Alphafold SwissProt",
+    grepl("foldseek_Alphafold_UniProt50_results_df.rds", foldseek_DB) ~
+      "Alphafold UniProt50",
+    grepl("foldseek_PDB", foldseek_DB) ~
+      "PDB",
+    grepl("ESMAtlas30", foldseek_DB) ~
+      "ESMAtlas30",
+    TRUE ~ "ERROR"
+  ))
+
+# Selecting for results from exact chains of interest from RCSB
+foldseek_res_df_all_rcsb <- foldseek_res_df_all_temp %>%
+  filter(pdb_source == "RCSB")
+
+foldseek_rcsb_qc <- eid_query_chains %>%
+  inner_join(foldseek_res_df_all_rcsb,
+    relationship = "many-to-many"
+  ) 
+foldseek_res_df_all <-
+  bind_rows(
+    foldseek_rcsb_qc,
+    foldseek_res_df_all_temp %>% filter(pdb_source == "AF2")
+  )
+
+signal6p_pred <- readRDS(
+  glue("{wkdir}/data/interim/metadata/immport_signal6p_pred.rds")
+)
+workflow_meta <-
+  readRDS(
+    glue(
+      "{wkdir}/data/interim/tmp/",
+      "2023-07-06_workflow-meta-sequence-analysis.rds"
+    )
+  ) %>%
+  mutate(gene_target_id = glue("{gene_name}_{ensembl_id}")) %>%
+  left_join(signal6p_pred)
+meta <-
+  workflow_meta %>%
+  select(
+    gene_target_id, gene_category,
+    transdomain_blastp_signal, signal6p_Prediction
+  )
+
+foldseek_meta_res <-
+  foldseek_res_df_all %>%
+  dplyr::left_join(meta, by = "gene_target_id")
+foldseek_meta_res %>% glimpse
+
+saveRDS(
+  foldseek_meta_res,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_foldseek_results_QC-trimmed.rds"
+    )
+  )
+
+```
+
+Collecting top hits and genes of interest.
+
+```{r, eval = FALSE}
+lineages_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "ncbi-taxdump-taxids-of-interest-df.rds"
+  )) %>%
+  dplyr::rename(sciname = name)
+
+foldseek_meta_res <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_foldseek_results_QC-trimmed.rds"
+    )) %>%
+  left_join(lineages_df, by = "taxid") %>%
+  drop_na(foldseek_DB) %>% # removes pdb chains with no hits within thresholds
+  filter(foldseek_DB != "PDB") # this database is showing non-microbial results
+
+query_pdb_paths <- readRDS(
+  glue("{wkdir}/data/interim/foldseek_results/2023-08-07_query_pdb_paths.rds")
+) %>%
+  mutate(query_pdb = gsub("_[A-Za-z]$", "", basename(pdb_path))) %>%
+    mutate(
+      pdb_chain = if_else(is.na(pdb_chain), basename(pdb_path), pdb_chain)
+    ) %>%
+  dplyr::rename(
+    gene_target_id = id,
+    query = pdb_chain,
+    query_chain = chain,
+    query_pdb_path = pdb_path
+  )
+
+```
+
+
+```{r, eval = FALSE}
+# Top 20 hits by BIT score per catalog
+foldseek_meta_res_summ <- foldseek_meta_res %>%
+  group_by(gene_target_id, foldseek_DB) %>%
+  summarize(
+    mean_bits = mean(bits),
+    max_bits = max(bits)
+  )
+
+top_mean_bits_overall <- foldseek_meta_res_summ %>%
+  group_by(foldseek_DB) %>%
+  slice_max(mean_bits,  n = 15, with_ties = FALSE) %>%
+  pull(gene_target_id) %>%
+  unique
+top_max_bits_overall <- foldseek_meta_res_summ %>%
+  group_by(foldseek_DB) %>%
+  slice_max(max_bits,  n = 15, with_ties = FALSE) %>%
+  pull(gene_target_id) %>%
+  unique
+top_bits_overall <-
+  unique(c(top_mean_bits_overall, top_max_bits_overall))
+
+foldseek_meta_res_sec_summ <- foldseek_meta_res %>%
+  group_by(gene_target_id, foldseek_DB, signal6p_Prediction) %>%
+  summarize(
+    mean_bits = mean(bits),
+    max_bits = max(bits)
+  ) %>%
+  filter(signal6p_Prediction == "SP")
+
+top_mean_bits_sec <- foldseek_meta_res_sec_summ %>%
+  group_by(foldseek_DB) %>%
+  slice_max(mean_bits,  n = 15, with_ties = FALSE) %>%
+  pull(gene_target_id) %>%
+  unique()
+top_max_bits_sec <- foldseek_meta_res_sec_summ %>%
+  group_by(foldseek_DB) %>%
+  slice_max(max_bits,  n = 15, with_ties = FALSE) %>%
+  pull(gene_target_id) %>%
+  unique()
+top_bits_sec <-
+  unique(c(top_mean_bits_sec, top_max_bits_sec))
+
+# Select all secreted cytokines, chemokines, ...
+workflow_meta %>% glimpse
+sec_cytokines_chemokines <-
+  workflow_meta %>%
+  filter(signal6p_Prediction == "SP") %>%
+  filter(
+    grepl("CD|IL|CCL|CXC|TGF", gene_name)
+  ) %>%
+  filter(
+    !grepl("R|ECD|DCD|PIK3CD", gene_name)
+  )  %>% 
+  pull(gene_target_id) %>%
+    unique()
+
+saveRDS(
+  top_bits_overall,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_gene-target-ids_top20-per-catalog-by-bits.rds"
+  )
+)
+saveRDS(
+  top_bits_sec,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_gene-target-ids_top20-secreted-per-catalog-by-bits.rds"
+  )
+)
+saveRDS(
+  sec_cytokines_chemokines,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_gene-target-ids_all-cytokines-chemokines.rds"
+  )
+)
+
+```
+
+plotting top hits
+
+```{r}
+top_bits_overall <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_top20-per-catalog-by-bits.rds"
+  )
+)
+top_bits_sec <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_top20-secreted-per-catalog-by-bits.rds"
+  )
+)
+sec_cytokines_chemokines <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_all-cytokines-chemokines.rds"
+  )
+)
+gois <- unique(
+  c(
+    top_bits_overall,
+    top_bits_sec, 
+    sec_cytokines_chemokines
+  )
+)
+
+```
+
+```{r, eval = FALSE}
+secreted_prot <- workflow_meta %>%
+  filter(signal6p_Prediction == "SP") %>%
+  pull(gene_target_id) %>%
+  unique()
+
+plot_top_hits_df <- foldseek_meta_res %>%
+  filter(lddt > 0.5 & alntmscore > 0.3) %>%
+  mutate(
+    signal6p_Prediction =
+      if_else(grepl("SP", signal6p_Prediction),
+        "signal-peptide", "intracellular"
+      ),
+    transdomain_blastp_signal =
+      if_else(grepl("TRUE", transdomain_blastp_signal),
+        "multi-kingdom", "eukaryotic-only"
+      ),
+    signalpep_transdomain = paste0(
+      signal6p_Prediction, "\n", transdomain_blastp_signal
+    )
+  ) %>%
+  arrange(lddt)
+
+
+p_top_overall <- plot_top_hits_df %>%
+  filter(gene_target_id %in% top_bits_overall) %>%
+  ggplot(aes(x = bits, y = fct_reorder(gene_target_id, bits))) +
+  facet_grid(
+    signalpep_transdomain~foldseek_DB, 
+    space = "free_y", scales = "free_y"
+  ) +
+  geom_point(aes(color = lddt), position = position_jitter(height = 0.2)) +
+    scale_color_viridis_c(option = "F", direction = -1) +
+    scale_x_log10() +
+    theme_bw() +
+    labs(x = "Structural Bit Score", y = NULL) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text.y.right = element_text(angle = 0)
+      )
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_top-gene-targets.png"),
+  p_top_overall,
+  width = 12,
+  height = 12
+)
+
+p_top_secreted <- plot_top_hits_df %>%
+  filter(gene_target_id %in% top_bits_sec) %>%
+  ggplot(aes(x = bits, y = fct_reorder(gene_target_id, bits))) +
+  facet_grid(
+    transdomain_blastp_signal~foldseek_DB, 
+    space = "free_y", scales = "free_y"
+  ) +
+  geom_point(aes(color = lddt), position = position_jitter(height = 0.2)) +
+    scale_color_viridis_c(option = "F", direction = -1) +
+    scale_x_log10() +
+    theme_bw() +
+    labs(x = "Structural Bit Score", y = NULL) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text.y.right = element_text(angle = 0)
+      )
+
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_top-gene-targets_secreted.png"),
+  p_top_secreted,
+  width = 12,
+  height = 12
+)
+
+p_top_cyt <- plot_top_hits_df %>%
+  filter(gene_target_id %in% sec_cytokines_chemokines) %>%
+  ggplot(aes(x = bits, y = fct_reorder(gene_target_id, bits))) +
+  facet_grid(
+    signalpep_transdomain~foldseek_DB, 
+    space = "free_y", scales = "free_y"
+  ) +
+  geom_point(aes(color = lddt), position = position_jitter(height = 0.2)) +
+    scale_color_viridis_c(option = "F", direction = -1) +
+    scale_x_log10() +
+    theme_bw() +
+    labs(x = "Structural Bit Score", y = NULL) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text.y.right = element_text(angle = 0)
+      )
+
+ggsave(
+  glue(
+    "{wkdir}/figures/foldseek/",
+    "{Sys.Date()}_top-gene-targets_cytokines-chemokines.png"
+  ),
+  p_top_cyt,
+  width = 12,
+  height = 12
+)
+
+```
+
+
+::: panel-tabset
+### Top Hits
+![](../figures/foldseek/2023-08-07_top-gene-targets.png)
+
+### Top Secreted Hits
+![](../figures/foldseek/2023-08-07_top-gene-targets_secreted.png)
+
+### All Cytokines/Chemokines
+![](../figures/foldseek/2023-08-07_top-gene-targets_cytokines-chemokines.png)
+:::
+
+Re-running FoldSeek with the top hits to generate html summaries and download PDB hits
+
+```{r, eval = FALSE}
+pb  <- progress::progress_bar$new(
+  format = "[:bar] :percent eta: :eta",
+  total = length(pdb_dirs)
+)
+# find processed fasta paths of this list
+batch_input_df <- data.frame()
+for (pdb_dir in pdb_dirs) {
+  pb$tick()
+  target <- basename(pdb_dir)
+  pdb_paths <- list.files(pdb_dir, full.names = TRUE)
+  for (pdb_path in pdb_paths) {
+    pdb_target_name <- fs::path_ext_remove(basename(pdb_path))
+    for (DB in input_db_list) {
+      db_name <- basename(DB)
+      output_name <- glue("{pdb_target_name}_{db_name}.html")
+      output_dir <- glue(
+        "{wkdir}/data/interim/foldseek_results/",
+        "html_output/{target}/{pdb_target_name}"
+      )
+      pdb_output_dir <- glue(
+        "{wkdir}/data/interim/foldseek_results/",
+        "pdb_output/{target}/{pdb_target_name}"
+      )
+      # skip if output already exists
+      # if (file.exists(glue("{output_dir}/{output_name}"))) {
+      #   next
+      # }
+      # dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+      # dir.create(pdb_output_dir, recursive = TRUE, showWarnings = FALSE)
+      # message("Processing: ", output_name)
+      if (db_name == "foldseek_ESMAtlas30") {
+        taxon_flag <- db_params[["foldseek_ESMAtlas30"]]$taxon_flag
+        output_params <- db_params[["foldseek_ESMAtlas30"]]$output_params
+      } else {
+        taxon_flag <- db_params[["Other"]]$taxon_flag
+        output_params <- db_params[["Other"]]$output_params
+      }
+      batch_input_df %<>%
+        bind_rows(
+          as_tibble_row(list(
+            "pdb_path" = pdb_path,
+            "database_path" = DB,
+            "output_path" = glue("{output_dir}/{output_name}"),
+            "threads" = threads,
+            "params" = output_params,
+            "taxon_flag" = taxon_flag,
+            "format" = " --format-mode 3"
+          ))
+        )
+    }
+  }
+}
+
+#______________________________________________________________________________
+# Generating HTML summaries
+# Trim EID list down to genes of interest
+batch_input_df_gois <- batch_input_df %>%
+  mutate(target_gene_id = 
+    strex::str_before_last(pdb_path, "/") %>%
+      strex::str_after_last("/")
+    ) %>%
+  filter(target_gene_id %in% gois) %>%
+  select(-target_gene_id)
+
+batch_input_df_gois %>% glimpse()
+batch_input_df_gois %<>% filter(!file.exists(output_path))
+batch_input_df_gois %>% glimpse()
+
+# configure registry ----
+cluster_run <- glue("{get_time()}_FoldSeek/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.05,
+  fs.latency = 65
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = run_foldseek_easysearch,
+  args = batch_input_df_gois,
+  reg = breg
+)
+submitJobs(jobs,
+  resources = list(
+    walltime = 10800,
+    memory = 16000,
+    ncpus = 8,
+    max.concurrent.jobs = 9999
+  )
+)
+
+# #______________________________________________________________________________
+# # Downloading PDBs of hits
+
+# batch_input_df %>% glimpse
+# # Trim EID list down to genes of interest
+# batch_input_df_gois <- batch_input_df %>%
+#   mutate(target_gene_id = 
+#     strex::str_before_last(pdb_path, "/") %>%
+#       strex::str_after_last("/")
+#     ) %>%
+#   filter(target_gene_id %in% gois) %>%
+#   select(-target_gene_id)
+
+# # run with format mode 5 to get pdb structures  -------
+# batch_input_df_gois_pdb <- batch_input_df_gois %>%
+#   mutate(
+#     format = " --format-mode 5",
+#     output_path = gsub("\\.html", "", output_path),
+#     output_path = gsub("html_output", "pdb_output", output_path),
+#     )
+# batch_input_df_gois_pdb %>% glimpse()
+# batch_input_df_gois_pdb %<>% filter(!file.exists(output_path))
+# batch_input_df_gois_pdb %>% glimpse()
+
+# # configure registry ----
+# cluster_run <- glue("{get_time()}_FoldSeek-PDB-Downloads/")
+# message("\n\nRUNNING:  ", cluster_run, "\n")
+# breg <- makeRegistry(
+#   file.dir = glue(
+#     "{wkdir}/.cluster_runs/",
+#     cluster_run
+#   ),
+#   seed = 42
+# )
+# breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+#   template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+#   scheduler.latency = 0.05,
+#   fs.latency = 65
+# )
+# # Submit Jobs ----
+# jobs <- batchMap(
+#   fun = run_foldseek_easysearch,
+#   args = batch_input_df_gois_pdb,
+#   reg = breg
+# )
+# submitJobs(jobs,
+#   resources = list(
+#     walltime = 10800,
+#     memory = 10000,
+#     ncpus = 8,
+#     max.concurrent.jobs = 9999
+#   )
+# )
+
+
+```
+
+Removing PDB files with match qualities below threshold to clear space.
+```{r, eval = FALSE}
+dir_names <-
+  list.files(glue("{wkdir}/data/interim/foldseek_results/pdb_output"),
+  )
+
+future::plan(multisession, workers = 14)
+for (gid in dir_names) {
+  message("Processing ", gid)
+  pdb_df <- list.files(
+    glue("{wkdir}/data/interim/foldseek_results/pdb_output/{gid}"),
+    recursive = TRUE,
+    full.names = TRUE,
+    pattern = ".pdb"
+  ) %>%
+    format_foldseek_pdb_paths() %>%
+    mutate(query = toupper(query))
+
+  res_trim <- foldseek_meta_res %>%
+    filter(gene_target_id == gid) %>%
+    mutate(query = toupper(query)) %>%
+    select(gene_target_id, query, target, fident)
+
+  # remove PDB files with match quality below thresholds
+  pdbs_below_thres <- pdb_df %>%
+    full_join(res_trim, 
+      by = join_by(gene_target_id, target, query),
+      relationship = "many-to-many"
+    ) %>%
+    filter(is.na(fident)) %>% # select rows without a match in foldseek_meta_res
+    pull(pdb_path) %>%
+    unique()
+
+  message(
+    "Removing ", length(pdbs_below_thres),
+    " PDB files with match quality below thresholds"
+  )
+  if (is.na(pdbs_below_thres[1])) {
+    next
+  } else if (length(pdbs_below_thres) > 20000) {
+  furrr::future_walk(pdbs_below_thres, unlink)
+  } else {
+  purrr::walk(pdbs_below_thres, unlink)
+  }
+}
+future::plan(sequential)
+```
+
+Downloading AF and ESM PDB for targets of interest
+```{r, eval = FALSE}
+top_targets_df <-
+  foldseek_meta_res %>%
+  filter(gene_target_id %in% gois) %>%
+  filter(foldseek_DB %in% c("Alphafold UniProt50", "ESMAtlas30")) %>%
+  group_by(gene_target_id, foldseek_DB, query) #%>%
+  # slice_max(order_by = lddt, n = 1000, with_ties = FALSE)
+
+pdb_output_dir <- glue("{wkdir}/data/interim/foldseek_results/target_pdbs")
+
+future::plan(multisession, workers = 24)
+top_targets_df$target %>%
+  unique() %>%
+  gsub(".pdb.gz", "", .) %>%
+  keep(!file.exists(
+    glue("{wkdir}/data/interim/foldseek_results/target_pdbs/{.}.pdb")
+  )) %>%
+  furrr::future_walk(
+    ~ download_pdb(
+      name = .,
+      outpath = pdb_output_dir
+    )
+  )
+
+# saving a data-table with paths to query and target PDBS along side results for genes of interest
+goi_df <- top_targets_df %>%
+  mutate(temp_target_name = gsub(".pdb.gz", "", target)) %>%
+  mutate(target_pdb_path = glue("{pdb_output_dir}/{temp_target_name}.pdb")) %>%
+  mutate(target_pdb_path_exists = file.exists(target_pdb_path)) %>%
+  filter(target_pdb_path_exists) %>%
+  left_join(query_pdb_paths, by = join_by("gene_target_id", "query"))
+
+saveRDS(goi_df,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_goi-results-with-paths.rds"
+  )
+)
+
+```
+
+Gene descriptions
+```{r, eval = FALSE}
+# Collecting UniProt descriptions of genes with gget
+reticulate::use_condaenv(
+  condaenv = "/home/jboktor/miniconda3/envs/pdmbsR", required = TRUE
+)
+gget <- import("gget")
+# utility function to save ggetinfo results
+save_ggetinfo_results  <- function(search_term, outpath) {
+  res <- gget$info(search_term)
+  saveRDS(res, outpath)
+}
+eids <- c(top_bits_overall, top_bits_sec, sec_cytokines_chemokines) %>%
+  strex::str_after_first(., "_")
+
+eids %>%
+  keep(!file.exists(
+    glue("{wkdir}/data/interim/metadata/gget-info/{.}.rds")
+  )) %>%
+  purrr::walk(~ save_ggetinfo_results(
+    .,
+    glue("{wkdir}/data/interim/metadata/gget-info/{.}.rds")
+  ))
+
+ggetinfo_paths <- list.files(
+  glue("{wkdir}/data/interim/metadata/gget-info"),
+  full.names = TRUE,
+  pattern = "ENSG*"
+)
+uniprot_gene_descriptions_raw <- purrr::map_dfr(
+  ggetinfo_paths,
+   ~ readRDS(.) %>% mutate_all(as.list)
+)
+saveRDS(
+  uniprot_gene_descriptions_raw,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_gget-info-genes-of-interest.rds"
+  )
+)
+```
+
+```{r}
+#| column: screen-inset-shaded
+uniprot_gene_descriptions_raw <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gget-info-genes-of-interest.rds"
+  )
+)
+uniprot_gene_descriptions <- uniprot_gene_descriptions_raw %>%
+  dplyr::select(
+    primary_gene_name,
+    ensembl_id,
+    protein_names,
+    ensembl_description,
+    uniprot_description,
+    ncbi_description,
+    subcellular_localisation
+  )
+
+uniprot_gene_descriptions %>%
+  DT::datatable(options = list(scrollX = TRUE, pageLength = 2))
+```
+
+
+Visualizing percent identity by lddt for matches by domain
+
+```{r, eval = FALSE}
+summary_stats <- foldseek_meta_res %>%
+    filter(gene_target_id %in% gois) %>%
+  group_by(gene_target_id) %>% 
+  dplyr::summarize(
+    fident_median = median(fident, na.rm = TRUE),
+    fident_sd = sd(fident, na.rm = TRUE),
+    lddt_median = median(lddt, na.rm = TRUE),
+    lddt_sd = sd(lddt, na.rm = TRUE),
+  )
+
+domain_levels <- c("Eukaryota", "Bacteria", "Archaea")
+p_ident_lddt <- foldseek_meta_res %>%
+  filter(gene_target_id %in% gois) %>%
+  filter(foldseek_DB == "Alphafold UniProt50") %>%
+  left_join(summary_stats) %>%
+  mutate(L2 = factor(L2, levels = domain_levels)) %>%
+  ggplot(aes(x = fident, y = lddt)) +
+  geom_point(aes(color = L2), shape = 21, size = 1, alpha = 0.95) +
+  geom_linerange(
+    aes(
+      x = fident_median,
+      ymin = lddt_median - lddt_sd, ymax = lddt_median + lddt_sd
+    ),
+    color = "#4C4E52", linewidth = 0.1, alpha = 0.1
+  ) +
+  geom_linerange(
+    aes(
+      y = lddt_median, xmin = fident_median - fident_sd,
+      xmax = fident_median + fident_sd
+    ),
+    color = "#4C4E52", linewidth = 0.1, alpha = 0.1
+  ) +
+  geom_point(
+    aes(
+      x = fident_median,
+      y = lddt_median
+    ),
+    shape = 21, size = 3
+  ) +
+  guides(color = guide_legend(override.aes = list(size=3))) +
+  lims(x=c(0, 1), y=c(0.5, 1)) +
+  scale_fill_jco() +
+  scale_color_jco() +
+  labs(
+    x = "% Sequence Identity",
+    y = "LDDT",
+    color = "Domain"
+  ) +
+  theme_bw() +
+  theme(legend.position = "top")
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_fident-lddt.png"),
+  p_ident_lddt,
+  width = 8, height = 8
+)
+```
+
+![AF-UniProt50 Results for genes of interest described above. Percent Sequence Alignment by Local Distance Difference Test. The median results for each human query gene are shown in black circles with standard deviations as lineranges.](../figures/foldseek/2023-08-07_fident-lddt.png){#fig_fident-lddt}
+
+
+
+```{r, eval = FALSE}
+summary_stats_by_domain <- foldseek_meta_res %>%
+  filter(gene_target_id %in% gois) %>%
+  filter(foldseek_DB == "Alphafold UniProt50") %>%
+  group_by(L2, gene_target_id) %>% 
+  dplyr::summarize(
+    fident_mean = mean(fident, na.rm = TRUE),
+    fident_sd = sd(fident, na.rm = TRUE),
+    lddt_mean = mean(lddt, na.rm = TRUE),
+    lddt_sd = sd(lddt, na.rm = TRUE),
+  )
+
+p_ident_lddt_summary <- summary_stats_by_domain %>%
+  filter(gene_target_id %in% gois) %>%
+  mutate(L2 = factor(L2, levels = domain_levels)) %>%
+  ggplot(aes(x = fident, y = lddt)) +
+  geom_point(
+    aes(
+      x = fident_mean,
+      y = lddt_mean,
+      color = L2,
+      group = gene_target_id
+    ),
+    shape = 21, size = 3
+  ) +
+  # guides(color = "none") +
+  scale_fill_jco() +
+  scale_color_jco() +
+  labs(
+    x = "% Sequence Identity",
+    y = "Local Distance Difference Test",
+    fill = "Domain"
+  ) +
+  theme_bw()
+
+saveRDS(
+  p_ident_lddt_summary,
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_fident-lddt-means-ggplotly.rds")
+)
+
+```
+
+```{r}
+p_ident_lddt_summary <- readRDS(
+  glue("{wkdir}/figures/foldseek/2023-08-07_fident-lddt-means-ggplotly.rds")
+)
+ggplotly(p_ident_lddt_summary)
+```
+
+Are there gene ID hits that are over-represented by specific domains in our results?
+
+```{r, eval = FALSE}
+domain_relab <- foldseek_meta_res %>%
+  filter(foldseek_DB == "Alphafold UniProt50") %>%
+  group_by(gene_target_id) %>%
+  mutate(total_hits = n()) %>%
+  group_by(gene_target_id, L2) %>%
+  mutate(domain_hits = n()) %>%
+  ungroup() %>%
+  mutate(domain_perc = (domain_hits / total_hits) * 100)
+
+# Seriating Heatmap
+mat <- domain_relab %>%
+  select(gene_target_id, L2, domain_perc) %>%
+  distinct() %>%
+  pivot_wider(
+    names_from = gene_target_id,
+    values_from = domain_perc, values_fill = 0
+  ) %>%
+  column_to_rownames(var = "L2") %>%
+  as.matrix()
+
+# domain_order <- seriate_matrix_rows(mat)
+gene_order <- seriate_matrix_rows(t(mat))
+
+p_domain_relab <- domain_relab %>%
+  mutate(
+    L2 = factor(L2, levels = domain_levels),
+    gene_target_id = factor(gene_target_id, levels = gene_order)
+  ) %>%
+  select(gene_target_id, L2, total_hits, domain_hits, domain_perc) %>%
+    distinct() %>%
+    filter(gene_target_id %in% gois) %>%
+    ggplot(aes(y = gene_target_id, x = domain_perc, fill = L2)) +
+    geom_bar(position = "stack", stat = "identity") +
+    scale_fill_jco() +
+    labs(x = "Domain %", y = NULL, fill = "Domain") +
+    theme_bw() +
+    theme(legend.position = "top")
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_domain-relative-abundance.png"),
+  p_domain_relab,
+  width = 12, height = 16
+)
+```
+
+![Relative abundance by domain of Alphafold-UniProt50 results identified as proteins of interest](../figures/foldseek/2023-08-07_domain-relative-abundance.png){#fig-domain-relab}
+
+**Key Takeaways**
+- Many hits are dominated by a single domain.
+- Bacteria and Eukaryota are both well represented in the hits, while Archaea are more rare and Viruses are entirely absent.
+
+
+What taxa are most represented in our results when analyzing cytokines?
+
+```{r, eval = FALSE}
+# plotting function
+plot_top_taxa <- function(df){
+  p <- df %>% dplyr::group_by(sciname) %>%
+    mutate(sciname_counts = n()) %>%
+    ungroup() %>%
+    select(sciname, sciname_counts, L2) %>%
+    distinct() %>%
+    slice_max(sciname_counts, n = 50, with_ties = FALSE) %>%
+    mutate(L2 = factor(L2, levels = domain_levels)) %>%
+    ggplot(aes(y = reorder(sciname, sciname_counts), x = sciname_counts)) +
+    labs(x = "Number of hits", y = NULL, fill = "Domain") +
+    geom_col(aes(fill = L2)) +
+    scale_fill_jco() +
+    theme_bw()
+  return(p)
+}
+
+af50res <- foldseek_meta_res %>%
+  filter(foldseek_DB == "Alphafold UniProt50") %>%
+  drop_na(sciname)
+p_taxa_hits_all <- af50res %>% plot_top_taxa()
+p_taxa_hits_top <- af50res %>%
+  filter(gene_target_id %in% top_bits_overall) %>%
+  plot_top_taxa()
+p_taxa_hits_top_sec <- af50res %>%
+  filter(gene_target_id %in% top_bits_sec) %>%
+  plot_top_taxa()
+p_taxa_hits_cytchem <- af50res %>%
+  filter(gene_target_id %in% sec_cytokines_chemokines) %>%
+  plot_top_taxa()
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_taxa-barplots_all.png"),
+  p_taxa_hits_all,
+  width = 10, height = 12
+)
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_taxa-barplots_top-overall.png"),
+  p_taxa_hits_top,
+  width = 10, height = 12
+)
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_taxa-barplots_top-secreted.png"),
+  p_taxa_hits_top_sec,
+  width = 10, height = 12
+)
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_taxa-barplots_cytokines-chemokines.png"),
+  p_taxa_hits_cytchem,
+  width = 10, height = 12
+)
+
+```
+
+
+::: panel-tabset
+### All QC hits
+![](../figures/foldseek/2023-08-07_taxa-barplots_all.png){#fig-taxarank}
+
+### Top hits overall
+![](../figures/foldseek/2023-08-07_taxa-barplots_top-overall.png){#fig-taxarank}
+
+### Top hits secreted
+![](../figures/foldseek/2023-08-07_taxa-barplots_top-secreted.png){#fig-taxarank}
+
+### QC hits cytokines/chemokines
+![](../figures/foldseek/2023-08-07_taxa-barplots_cytokines-chemokines.png){#fig-taxarank}
+:::
+
+
+
+### Examining top hits
+
+Utility functions
+
+```{r, eval = FALSE}
+# Note: this section section was replaced with an alternative workflow that downloads PDBs of interest and re-aligns them to query structures for viz.
+
+# get_top_foldseek_hits <- function(
+#     gene_symbol_eid,
+#     foldseek_results,
+#     query_meta) {
+#   require(dplyr)
+#   # 2. Select target gene from results table and get PDBs of interest to plot
+#   fsk_hit_df_all <-
+#     foldseek_results %>%
+#     mutate(
+#       query_pdb = gsub("_[A-Za-z]$", "", query)
+#     ) %>%
+#     filter(gene_target_id == gene_symbol_eid)
+
+#   # getting the top 3 query structures per target
+#   fsk_query_hits_per_DB_df <- fsk_hit_df_all %>%
+#     group_by(query_pdb, foldseek_DB) %>%
+#     slice_max(order_by = lddt, n = 1, with_ties = FALSE) %>%
+#     group_by(foldseek_DB) %>%
+#     slice_max(order_by = lddt, n = 3, with_ties = FALSE) %>%
+#     select(foldseek_DB, query)
+
+#   db_list <- fsk_query_hits_per_DB_df$foldseek_DB %>% unique()
+#   fsk_query_hits_per_DB <- db_list %>%
+#     purrr::set_names() %>%
+#     purrr::map(
+#       ~ filter(fsk_query_hits_per_DB_df, foldseek_DB == .x) %>%
+#         pull(query) %>%
+#         unique()
+#     )
+#   top_query_hits <- unlist(fsk_query_hits_per_DB) %>%
+#     unname() %>%
+#     unique()
+
+#   # Getting the top 3 hits per query hit per DB (up to 3x3x5 = 45 rows)
+#   hits_to_plot_res <- db_list %>%
+#     purrr::map_dfr(
+#       ~ filter(fsk_hit_df_all, foldseek_DB == .x) %>%
+#         filter(query %in% fsk_query_hits_per_DB[[.x]]) %>%
+#         group_by(query, foldseek_DB) %>%
+#         slice_max(order_by = lddt, n = 3, with_ties = FALSE)
+#     )
+
+#   # 3. Loading in query pdb paths and aligned foldseek result PDBs
+#   hits_to_plot <- hits_to_plot_res %>%
+#     mutate(
+#       pdb_output_path =
+#         gsub("2023-07-22_easysearch", "pdb_output", id) %>%
+#           gsub(".m8", "", .),
+#       target_pdb_path =
+#         glue("{pdb_output_path}", "{query}_{target}.pdb"),
+#       target_pdb_path_exists = file.exists(target_pdb_path),
+#       query = toupper(query)
+#     ) %>%
+#     left_join(query_meta, by = join_by(query, gene_target_id, query_pdb))
+#   return(hits_to_plot)
+# }
+
+# plot_foldseek_results <- function(hits_to_plot) {
+#   require(dplyr)
+#   model_results <- list()
+#   for (db in unique(hits_to_plot$foldseek_DB)) {
+#     db_filt <- hits_to_plot %>%
+#       filter(foldseek_DB == db, target_pdb_path_exists) %>%
+#       tidyr::drop_na(query_pdb_path)
+#     if (nrow(db_filt) == 0) {
+#       next
+#     }
+#     for (query_path in unique(db_filt$query_pdb_path)) {
+#       message("Query: ", basename(query_path))
+#       query_filt <- db_filt %>%
+#         filter(query_pdb_path == query_path)
+#       model_results[[db]][[basename(query_path)]] <-
+#         view_foldseek_pdb(
+#           query_pdb_path = query_path,
+#           query_chain = unique(query_filt$query_chain),
+#           target_pdbs_path_list = query_filt$target_pdb_path
+#         )
+#     }
+#   }
+#   return(model_results)
+# }
+
+# possibly_get_top_foldseek_hits <- possibly(
+#   get_top_foldseek_hits,
+#   otherwise = list()
+# )
+# possibly_plot_foldseek_results <- possibly(
+#   plot_foldseek_results,
+#   otherwise = list()
+# )
+# possibly_save_foldseek_results <- function(hits_to_plot, wk = wkdir) {
+#   res <- possibly_plot_foldseek_results(hits_to_plot)
+#   saveRDS(
+#     res,
+#     glue(
+#       "{wk}/data/interim/foldseek_results/aligned_pdb_models/",
+#       "{Sys.Date()}_foldseek_pdb_models_",
+#       "{unique(hits_to_plot$gene_target_id)}.rds"
+#     )
+#   )
+# }
+
+```
+
+Aligning PDB structures for top hits
+```{r, eval = FALSE}
+gois <- unique(
+  c(
+    top_bits_overall,
+    top_bits_sec,
+    sec_cytokines_chemokines
+  )
+)
+dt_hits <- foldseek_meta_res %>%
+  filter(gene_target_id %in% gois)
+saveRDS(dt_hits, glue(
+  "{wkdir}/data/interim/foldseek_results/",
+  "{Sys.Date()}_goi_hits_df.rds"
+))
+
+# future::plan(multisession, workers = 6)
+# top_goi_hits <- gois %>%
+#   purrr::set_names() %>%
+#   furrr::future_map(
+#     ~ possibly_get_top_foldseek_hits(
+#       gene_symbol_eid = .,
+#       foldseek_results = foldseek_meta_res,
+#       query_meta = query_pdb_paths
+#     )
+#   )
+
+# top_goi_hits_df <- top_goi_hits %>% bind_rows() 
+# saveRDS(
+#   top_goi_hits_df,
+#   glue(
+#     "{wkdir}/data/interim/foldseek_results/",
+#     "{Sys.Date()}_top_goi_hits.rds"
+#   )
+# )
+# 
+# eids_no_hits <- top_goi_hits %>%
+#   purrr::map(nrow) %>%
+#   keep(is.null) %>%
+#   names()
+# future::plan(multisession, workers = 8)
+# gois %>%
+#   keep(!. %in% eids_no_hits) %>%
+#   keep(!file.exists(
+#     glue(
+#       "{wkdir}/data/interim/foldseek_results/aligned_pdb_models/",
+#       "2023-08-03_foldseek_pdb_models_{.}.rds"
+#     )
+#   )) %>%
+#   purrr::set_names() %>%
+#   furrr::future_walk(
+#     ~ possibly_save_foldseek_results(top_goi_hits[[.]])
+#   )
+# # remove failed downloads
+# list.files(
+#   glue("{wkdir}/data/interim/foldseek_results/aligned_pdb_models"),
+#   full.names = TRUE
+# ) %>%
+#   keep(file.size(.) < 50) %>%
+#     unlink()
+```
+
+### FoldSeek Results - Genes of interest
+
+```{r}
+#| column: screen-inset-shaded
+dt_hits <- readRDS(glue(
+  "{wkdir}/data/interim/foldseek_results/",
+  "2023-08-07_goi_hits_df.rds"
+))
+
+dt_hits %<>%
+  group_by(gene_target_id, query, foldseek_DB) %>%
+  slice_max(order_by = bits, n = 10) %>%
+  select(-c(id, lineage))
+
+dt_hits %>%
+  DT::datatable(options = list(scrollX = TRUE, pageLength = 7))
+```
+
+### Sample Structural Alignments
+
+**Note:** Instead of using Foldseek structural alignments, which require downloding many PDB files, here we access specific PDBs of interest and download them from either the AlphaFold Structure or ESM databases using their respective APIs. These target PDBs are then aligned to the query pdbs using the vbio3d::struct.al function, which creates an MSA and uses iterative refinement to align the structures. Structures with high local but low global aligment will likely not align properly using this method; however, this step is explicitly for visual quality assessment.
+
+
+
+```{r, eval = FALSE}
+goi_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-10_goi-results-with-paths.rds"
+  )
+)
+goi_df_plot <- goi_df %>% 
+  slice_max(order_by = lddt, n = 15, with_ties = FALSE)
+
+```
+
+```{r, eval = FALSE}
+# Function to align and visualize Query  - Target PDBs (can handel multiple targets)
+save_foldseek_top_struct <- function(goi) {
+  require(glue)
+  require(dplyr)
+  message(glue("Processing {goi}..."))
+  pdb_mods <- list()
+  gti_df <- goi_df %>%
+    filter(gene_target_id == goi) %>%
+    filter(foldseek_DB %in% c("Alphafold UniProt50", "ESMAtlas30"))
+  for (qry in unique(gti_df$query)) {
+    gti_query_df <- filter(gti_df, query == qry)
+    for (db in unique(gti_query_df$foldseek_DB)) {
+      gti_query_db_df <- filter(gti_query_df, foldseek_DB == db)
+      for (domain in unique(gti_query_db_df$L2)) {
+        if (is.na(domain)) {
+          domain <- "Unknown"
+          gti_query_db_domain_df <- gti_query_db_df %>%
+            slice_max(order_by = lddt, n = 4)
+        } else {
+          gti_query_db_domain_df <- filter(gti_query_db_df, L2 == domain) %>%
+            slice_max(order_by = lddt, n = 4)
+        }
+        pdb_mods[[goi]][[qry]][[db]][[domain]] <- view_foldseek_pdb(
+          query_pdb_path = unique(gti_query_db_domain_df$query_pdb_path),
+          query_chain = unique(gti_query_db_domain_df$query_chain),
+          target_pdbs_path_list = gti_query_db_domain_df$target_pdb_path,
+          ca_inputs = FALSE,
+          align = TRUE
+        )
+      }
+    }
+  }
+  saveRDS(
+    pdb_mods,
+    glue(
+      "/central/groups/MazmanianLab/joeB/",
+      "Microbiota-Immunomodulation/Microbiota-Immunomodulation",
+      "/data/interim/foldseek_results/",
+      "top_pdb_models/{Sys.Date()}_{goi}.rds"
+    )
+  )
+}
+
+# Executing function
+future::plan(multisession, workers = 8)
+unique(goi_df$gene_target_id) %>%
+  keep(!file.exists(
+    glue(
+      "{wkdir}/data/interim/foldseek_results/",
+      "top_pdb_models/2023-08-07_{.}_.rds"
+    )
+  )) %>%
+  furrr::future_walk(
+    ~ save_foldseek_top_struct(.),
+    .progress = FALSE,
+    seed=TRUE
+  )
+```
+
+
+
+## Methods
+**FoldSeek**
+Local Difference Distance Test (LDDT): FoldSeek
+Template Modeling Score (TM): FoldSeek
+
+
+$$
+\begin{equation}
+\text{Structural Bit Score} = \text{Smith-Waterman Score} \times \sqrt{\text{LDDT} \times \text{TM-score}}
+\end{equation}
+$$

@@ -1,0 +1,1352 @@
+---
+title: "Structural Similarity Screen Pt.2 | Human Microbiome Filtering"
+editor: visual
+author: "Joe Boktor"
+date: '2023-04-18'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 5
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+    grid:
+      sidebar-width: 200px
+      body-width: 1100px
+      margin-width: 200px
+      gutter-width: 1.5em
+bibliography: references.bib
+---
+
+# Background
+Previously, we discovered a number of microbial proteins with intriguing structural similarity to human immune-effector molecules. Experimentally determined protein structures alongside AI folded proteins (AF & ESM) were used as inputs and searched against multiple databases of microbial proteins, namely the AlphaFold-UniProt50 and ESM-MGnify databases.
+
+Ultimately, our goal is to explore the prevalence and potential function of these proteins in the human microbiome. To pare down our list of potential proteins to study, we will apply a filter for human microbiome relavence.
+
+# Objectives
+In this analysis we will determine which genes with structural homology to human proteins of interest are present in the human microbiome. 
+
+To accomplish this, we will access metagenome-assembled genomes (MAGs) and cultured isolate representative species genomes from human gut microbiome samples. We will then search these genomes for the presence of our genes of interest.
+
+**Core questions:**
+
+1. Out of the 4,783 tested target proteins of interest, how many have any detection whatsoever in the human microbiome?
+2. At the ensembl ID level, how many of the target proteins are detected in the human microbiome?
+2. What is the distribution of detection for each foldseek target protein? (i.e. how many times is each protein detected across and within different genomes).
+3. Are there ensembl ID's that have widespread detection across multiple species? If so, what are the species that have the most hits?
+4. Are there representative species that have multiple proteins of interest? If so, are there trends at higher level clades (eg. Phylum level)?
+5. Are there correlations with genome contamination and detection of target proteins?
+6. Which of the representative species within UHGG are cultured isolates vs. MAGs? Are there differences in detection between the two groups?
+
+
+![Schematic of data architecture](../figures/manual/%E2%80%8EQuery-Target_panel.png.%E2%80%8E001.png){#fig-schem}
+
+## Analysis
+### Workflow Overview
+```{mermaid}
+%%| fig-width: 6
+flowchart TD
+  A(Quality Filtered \n Foldseek Hits) --> |Select top 20 Targets\nper Query-DB by LDDT| B(Microbial Mimetic \nQueries \n n=4,783 PDBs)
+  B(Microbial Mimetic \nQueries \n n=4,783 PDBs) --> G{DIAMOND\nProtein Search}
+  C[(UHGG Species \n n=4,744 genomes)] --> G{DIAMOND\nProtein Search}
+  style C fill:#C8D1F7
+  E[(UHGP-95 \n Protein Catalog \n 20+ million seqs)] -->  G{DIAMOND\nProtein Search}
+  style E fill:#C8D1F7
+  F[(hCom2 \n Synthetic Human Gut \n Microbiome \n n=200 genomes)] --> G{DIAMOND\nProtein Search}
+  style F fill:#C8D1F7
+  G{DIAMOND\nProtein Search} --> D(Human Microbiome \n Microbial Mimetic \n Candidates)
+
+```
+
+Environment setup.
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(bio3d)
+library(protr)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(furrr)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(strex)
+library(data.table)
+library(kableExtra)
+library(Biostrings)
+# Plotting functions
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+library(plotly)
+library(ggsci)
+library(viridis)
+library(ggforce)
+library(seriation)
+library(ggtree)
+library(mctoolsr)
+library(aplot)
+library(wordcloud)
+# protein structure analysis
+library(bio3d)
+library(r3dmol)
+# network analysis /vis
+library(igraph)
+library(tidygraph)
+library(ggraph)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+"{homedir}/Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+source(glue("{src_dir}/R_scripts/helpers_pdb-wrangling.R"))
+protein_catalogs <- glue("{homedir}/Downloads/protein_catalogs")
+fldsk_dir <- glue("{wkdir}/data/interim/foldseek_results")
+# 1.5gb  limit (1500*1024^2 = 1572864000)
+options(future.globals.maxSize= 1572864000)
+```
+
+Loading in foldseek gene of interest results
+
+```{r, eval = FALSE}
+top_bits_overall <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_top20-per-catalog-by-bits.rds"
+  )
+)
+top_bits_sec <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_top20-secreted-per-catalog-by-bits.rds"
+  )
+)
+sec_cytokines_chemokines <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-07_gene-target-ids_all-cytokines-chemokines.rds"
+  )
+)
+gois <- unique(
+  c(
+    top_bits_overall,
+    top_bits_sec, 
+    sec_cytokines_chemokines
+  )
+)
+```
+
+```{r, eval = FALSE}
+goi_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-10_goi-results-with-paths.rds"
+  )
+)
+goi_df %>% glimpse
+target_pdb_paths <- goi_df$target_pdb_path %>% unique()
+target_fasta_paths <- target_pdb_paths %>%
+  gsub("target_pdbs", "target_fasta", .) %>%
+  gsub(".pdb", ".faa", .) %>%
+  keep(file.exists(.))
+```
+
+Trimming down targets to top 20 by LDDT per (gene_target_id, foldseek_DB, query)
+```{r, eval = FALSE}
+goi_df_trim <- goi_df %>%
+  slice_max(order_by = lddt, n = 20, with_ties = FALSE)
+tois <- goi_df_trim %>%
+  pull(target) %>%
+  unique() %>%
+  gsub(".pdb.gz", "", .)
+# select best target-query score by bit score
+goi_df_trim_clean <- goi_df_trim %>%
+  mutate(target = gsub(".pdb.gz$", "", target)) %>%
+  group_by(gene_target_id, foldseek_DB, target) %>%
+  slice_max(bits, n = 1, with_ties = FALSE)
+```
+
+Saving fasta files for each target PDB of interest
+
+```{r, eval = FALSE}
+future::plan(multisession, workers = 42)
+target_pdb_paths %>%
+  keep(!file.exists(
+    glue(
+      "{wkdir}/data/interim/foldseek_results/target_fasta/",
+      "{fs::path_ext_remove(basename(.))}.faa"
+    )
+  )) %>%
+  furrr::future_walk(
+    ~ bio3d::write.fasta(
+      seqs = extract_fasta_from_pdb(bio3d::read.pdb(.)),
+      ids = fs::path_ext_remove(basename(.)),
+      file = gsub("target_pdbs", "target_fasta", .) %>% gsub(".pdb", ".faa", .)
+    )
+  )
+# note: one pdb file has errors and fails, file will be reomved from analysis: MGYP001565234154.pdb
+```
+
+### Creating DIAMOND databases
+##### 1. UHGG Representative Species
+
+```{r, eval = FALSE}
+# load in UHGG genome metadata
+mgnify_dir <- glue("{homedir}/Downloads/RefDBs/mgnify_genomes")
+uhgg_metadata <- read.delim(
+  glue("{wkdir}/data/input/mgnify/genomes-all_metadata.tsv")
+)
+uhgg_metadata %>% glimpse
+species_reps <- uhgg_metadata$Species_rep %>% unique()
+```
+
+```{r, eval = FALSE}
+# download representative species proteomes
+future::plan(multisession, workers = 2)
+species_reps %>%
+  keep(!file.exists(glue(
+    "{homedir}/Downloads/RefDBs/mgnify_genomes/human-gut/v2.0.1/",
+    "{.}.faa"
+  ))) %>%
+  furrr::future_walk(
+    ~ shell_do(
+      glue(
+        "wget -P",
+        " /central/groups/MazmanianLab/joeB/Downloads/",
+        "RefDBs/mgnify_genomes/human-gut/v2.0.1/",
+        " https://www.ebi.ac.uk/metagenomics/api/v1/genomes/",
+        "{.}/downloads/{.}.faa"
+      )
+    )
+  )
+
+# downloading UHGG phylogenetic trees
+shell_do(
+  glue(
+    "wget -P {wkdir}/data/input/mgnify/",
+    " http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/phylogenies/ar122_iqtree.nwk"
+  )
+)
+shell_do(
+  glue(
+    "wget -P {wkdir}/data/input/mgnify/",
+    " http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.1/phylogenies/bac120_iqtree.nwk"
+  )
+)
+# compile all representative species proteomes into a single file
+genome_paths <- list.files(
+  glue("{mgnify_dir}/human-gut/v2.0.1"),
+  pattern = "*.faa", full.names = TRUE
+  )
+pb <- progress_bar$new(total = length(genome_paths),
+  format = "[:bar] :current/:total (:percent)"
+  )
+for (f in genome_paths) {
+  pb$tick()
+  shell_do(glue("cat {f} >> {mgnify_dir}/human-gut_v2.0.1.fasta"))
+}
+
+# creating a DIAMOND DB
+dmnd_db <- glue("{homedir}/Downloads/RefDBs/diamondDBs/mgnify_human-gut_v2.0.1")
+dmnd_cmd <- glue(
+  "diamond makedb",
+  " --in {mgnify_dir}/human-gut_v2.0.1.fasta",
+  " -d {dmnd_db}"
+)
+slurm_shell_do(dmnd_cmd, walltime = 7200, memory = "10G")
+```
+
+##### 2. UHGP-95 Protein Catalog
+
+```{r, eval = FALSE}
+# Creating a DIAMOND DB for the UHGP-95 protein catalog
+dmnd_db_uhgp95 <- glue("{homedir}/Downloads/RefDBs/diamondDBs/uhgp-95_v2.0.1")
+dmnd_cmd <- glue(
+  "diamond makedb",
+  " --in {protein_catalogs}/UHGP_v2.0.1/uhgp-95/uhgp-95.faa",
+  " -d {dmnd_db_uhgp95}"
+)
+slurm_shell_do(dmnd_cmd, walltime = 36000, memory = "100G")
+```
+
+##### 3. hCom2 Synthetic Human Gut Microbiome
+
+Here we download hCom2 MAGs and generate a protein db for each individual strain using prodigal. We then concatenate all of the protein fasta files into a single file and create a DIAMOND DB.
+
+```{r, eval = FALSE}
+# Initiate future.batchtools backend for parallel processing
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = "prodigal-HCom2",
+    memory = "5G",
+    ncpus = 1,
+    walltime = 3600
+  )
+)
+
+# select input genome fasta files paths for prodigal
+hcom2_dir <- glue("{homedir}/Downloads/RefDBs/hCom2")
+hcom2_proteins_dir <- glue("{hcom2_dir}/protein_fastas")
+dir.create(hcom2_proteins_dir, showWarnings = FALSE)
+hcom2_genome_paths <-
+  list.files(
+    path = glue(
+      "/central/groups/MazmanianLab/shared/",
+      "reference_genomes/hCom2_transfer/fasta"
+    ),
+    full.names = TRUE
+  )
+
+hadza_mag_unprocessed_lgr <-
+  hcom2_genome_paths %>%
+  purrr::map( ~ !file.exists(glue("{hcom2_proteins_dir}/{basename(.)}")))
+
+hcom2_genome_paths_to_process <-
+  hcom2_genome_paths %>%
+  keep(unlist(hadza_mag_unprocessed_lgr))
+
+# generate list of desired fasta outputs
+hcom2_proteins_paths <-
+  purrr::map(
+    hcom2_genome_paths_to_process,
+    ~ glue("{hcom2_proteins_dir}/{fs::path_ext_remove(basename(.))}.faa")
+  )
+
+# Chunk files (5 per job) and download
+tic()
+n_jobs <- ceiling(length(hcom2_genome_paths_to_process) / 5)
+prodigal_runs <- listenv()
+
+for (job in 1:n_jobs) {
+  input_list <- chunk_func(hcom2_genome_paths_to_process, n_jobs)[[job]]
+  output_list <- chunk_func(hcom2_proteins_paths, n_jobs)[[job]]
+  prodigal_runs[[job]]  %<-% shell_do_prodigal_list(
+    input_genome_list = input_list,
+    output_fasta_list = output_list
+  )
+}
+toc()
+
+hCom2_faa_files <- list.files(hcom2_proteins_dir, full.names = TRUE)
+hCom2_faa_files %>% length()
+
+# concatenate all fasta files into a single file
+pb <- progress_bar$new(total = length(hCom2_faa_files),
+  format = "[:bar] :current/:total (:percent)"
+  )
+for (f in hCom2_faa_files) {
+  pb$tick()
+  shell_do(glue(
+    "cat {f} >> {hcom2_dir}/hCom2.fasta"
+  ))
+}
+
+# create a DIAMOND DB out of HCom2 proteomes
+dmnd_db_hcom2 <- glue("{homedir}/Downloads/RefDBs/diamondDBs/hCom2")
+dmnd_cmd <- glue(
+  "diamond makedb",
+  " --in {hcom2_dir}/hCom2.fasta",
+  " -d {dmnd_db_hcom2}"
+)
+slurm_shell_do(dmnd_cmd, walltime = 7200, memory = "10G")
+```
+
+### Executing DIAMOND protein searches
+
+```{r, eval = FALSE}
+target_fasta_paths_tois <- target_fasta_paths %>%
+  keep(fs::path_ext_remove(basename(.)) %in% tois)
+```
+
+##### 1. UHGG Representative Species
+
+```{r, eval = FALSE}
+dmnd_db <- glue("{homedir}/Downloads/RefDBs/diamondDBs/mgnify_human-gut_v2.0.1")
+batchtools_params <- data.frame(
+  input_faa = target_fasta_paths_tois
+) %>%
+  mutate(
+    output_m8 = glue(
+      "{wkdir}/data/interim/foldseek_results/",
+      "uhgg_diamond_results/",
+      "{fs::path_ext_remove(basename(input_faa))}.m8"
+    ),
+    dmnd_db = dmnd_db,
+    wkdir = wkdir,
+    sensitivity = ""
+  ) %>%
+  filter(!file.exists(output_m8))
+batchtools_params %>% glimpse
+
+# configure registry ----
+cluster_run <- glue("{get_time()}_DIAMOND_UHGG")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.1,
+  fs.latency = 1
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = shell_do_diamond,
+  args = batchtools_params,
+  reg = breg
+)
+jobs[, chunk := chunk(job.id, chunk.size = 10)]
+print(jobs[, .N, by = chunk])
+
+submitJobs(jobs,
+  resources = list(
+    walltime = 20800,
+    memory = 6000,
+    ncpus = 2,
+    max.concurrent.jobs = 9999
+  )
+)
+```
+
+##### 2. UHGP-95 Protein Catalog
+```{r, eval = FALSE}
+res_dir <- glue("{wkdir}/data/interim/foldseek_results/UHGP95_diamond_results")
+dir.create(res_dir, showWarnings = FALSE)
+dmnd_db_uhgp95 <- glue("{homedir}/Downloads/RefDBs/diamondDBs/uhgp-95_v2.0.1")
+
+batchtools_params <- data.frame(
+  input_faa = target_fasta_paths_tois
+) %>%
+  mutate(
+    output_m8 = glue(
+      "{res_dir}/{fs::path_ext_remove(basename(input_faa))}.m8"
+    ),
+    dmnd_db = dmnd_db_uhgp95,
+    wkdir = wkdir,
+    sensitivity = ""
+  ) %>%
+  filter(!file.exists(output_m8))
+batchtools_params %>% glimpse
+
+# configure registry ----
+cluster_run <- glue("{get_time()}_DIAMOND_UHGP95")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.1,
+  fs.latency = 1
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = shell_do_diamond,
+  args = batchtools_params,
+  reg = breg
+)
+jobs[, chunk := chunk(job.id, chunk.size = 5)]
+print(jobs[, .N, by = chunk])
+
+submitJobs(jobs,
+  resources = list(
+    walltime = 20800,
+    memory = 20000,
+    ncpus = 2,
+    max.concurrent.jobs = 9999
+  )
+)
+```
+
+##### 3. hCom2 Synthetic Human Gut Microbiome
+
+```{r, eval = FALSE}
+res_dir <- glue("{wkdir}/data/interim/foldseek_results/hcom2_diamond_results")
+dir.create(res_dir, showWarnings = FALSE)
+dmnd_db_hcom2 <- glue("{homedir}/Downloads/RefDBs/diamondDBs/hCom2")
+batchtools_params <- data.frame(
+  input_faa = target_fasta_paths_tois
+) %>%
+  mutate(
+    output_m8 = glue(
+      "{res_dir}/{fs::path_ext_remove(basename(input_faa))}.m8"
+    ),
+    dmnd_db = dmnd_db_hcom2,
+    wkdir = wkdir,
+    sensitivity = ""
+  ) %>%
+  filter(!file.exists(output_m8))
+batchtools_params %>% glimpse
+
+# configure registry ----
+cluster_run <- glue("{get_time()}_DIAMOND_HCom2")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.1,
+  fs.latency = 1
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = shell_do_diamond,
+  args = batchtools_params,
+  reg = breg
+)
+jobs[, chunk := chunk(job.id, chunk.size = 10)]
+print(jobs[, .N, by = chunk])
+
+submitJobs(jobs,
+  resources = list(
+    walltime = 20800,
+    memory = 6000,
+    ncpus = 2,
+    max.concurrent.jobs = 9999
+  )
+)
+
+```
+
+## Results
+Utility functions for loading and processing DIAMOND search results
+
+```{r, eval = FALSE}
+get_dmnd_result_paths <- function(dir) {
+  paths <- list.files(dir, pattern = "*.m8", full.names = TRUE) %>%
+    keep(fs::path_ext_remove(basename(.)) %in% tois)
+  return(paths)
+}
+
+aggregate_diamond_results <- function(path_list, nthreads = 32) {
+  tictoc::tic()
+  diamond_header <- c(
+    "target", "dmnd_target", "dmnd_pident",
+    "dmnd_length", "dmnd_mismatch", "dmnd_gapopen",
+    "dmnd_qstart", "dmnd_qend", "dmnd_sstart",
+    "dmnd_send", "dmnd_evalue", "dmnd_bitscore"
+  )
+  future::plan(multisession, workers = nthreads)
+  res <- path_list %>%
+    keep(file.size(.) > 0) %>%
+    furrr::future_map_dfr(
+      ~ read.delim(
+        .,
+        header = FALSE,
+        sep = "\t"
+      )
+    )
+  future::plan(sequential)
+  colnames(res) <- diamond_header
+  tictoc::toc()
+  return(res)
+}
+
+```
+
+```{r, eval = FALSE}
+# aggregate diamond results and append Genome and Foldseek metadata
+uhgg_results_all <-
+  get_dmnd_result_paths(glue("{fldsk_dir}/uhgg_diamond_results")) %>%
+  aggregate_diamond_results()
+uhgg_results_df <- uhgg_results_all %>%
+  mutate(dmnd_genome = str_before_first(dmnd_target, "_")) %>%
+  left_join(uhgg_metadata, by = c("dmnd_genome" = "Genome")) %>%
+  left_join(goi_df_trim_clean, by = "target", relationship = "many-to-many")
+saveRDS(
+  uhgg_results_all,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_UHGG.rds")
+)
+saveRDS(
+  uhgg_results_df,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_UHGG_plus_metadata.rds")
+)
+
+uhgp95_results_all <-
+  get_dmnd_result_paths(glue("{fldsk_dir}/UHGP95_diamond_results")) %>%
+  aggregate_diamond_results()
+uhgp95_results_df <- uhgp95_results_all %>%
+  left_join(goi_df_trim_clean, by = "target", relationship = "many-to-many")
+saveRDS(
+  uhgp95_results_all,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_UHGP95.rds")
+)
+saveRDS(
+  uhgp95_results_df,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_UHGP95_plus_metadata.rds")
+)
+
+hcom_results_all <-
+  get_dmnd_result_paths(glue("{fldsk_dir}/hcom2_diamond_results")) %>%
+  aggregate_diamond_results()
+hcom_results_df <- hcom_results_all %>%
+  mutate(dmnd_genome = str_before_first(dmnd_target, "_")) %>%
+  left_join(goi_df_trim_clean, by = "target", relationship = "many-to-many")
+saveRDS(
+  hcom_results_all,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_hCom2.rds")
+)
+saveRDS(
+  hcom_results_df,
+  glue("{fldsk_dir}/{Sys.Date()}_DIAMOND-results_hCom2_plus_metadata.rds")
+)
+
+```
+
+```{r, eval = FALSE}
+hcom_results_df <- readRDS(
+  glue("{fldsk_dir}/2023-08-17_DIAMOND-results_hCom2_plus_metadata.rds")
+)
+uhgp95_results_df <- readRDS(
+  glue("{fldsk_dir}/2023-08-17_DIAMOND-results_UHGP95_plus_metadata.rds")
+)
+uhgg_results_df <- readRDS(
+  glue("{fldsk_dir}/2023-08-17_DIAMOND-results_UHGG_plus_metadata.rds")
+)
+```
+
+```{r, eval = FALSE}
+gois_tested <- goi_df_trim_clean$gene_target_id %>% unique()
+
+# gene IDs found in each search
+uhgp95_results_df$gene_target_id %>% unique()
+uhgg_results_df$gene_target_id %>% unique()
+hcom_results_df$gene_target_id %>% unique()
+
+# gene IDs absent from each search
+setdiff(
+  gois_tested,
+  uhgp95_results_df$gene_target_id %>% unique()
+) %>% length()
+setdiff(
+  gois_tested,
+  uhgg_results_df$gene_target_id %>% unique()
+) %>% length()
+setdiff(
+  gois_tested,
+  hcom_results_df$gene_target_id %>% unique()
+) %>% length()
+
+```
+
+**Key Takeaways:**
+
+Out of 138 gene targets of interest with Foldseek resulst above our significance threshold, we find:
+
+- **84 (61%)** in the UHGP-95 protein catalog
+- **78 (57%)** in the 4,744 UHGG representative species catalog
+- **70 (51%)** in the 120 species hCom2 catalog
+
+```{r, eval = FALSE}
+eid_hit_stats <-list(
+  "hCom2" = hcom_results_df,
+  "UHGP-95" = uhgp95_results_df,
+  "UHGG" = uhgg_results_df
+) %>%
+  purrr::set_names(names(.)) %>%
+    purrr::map(
+      ~ select(., contains("dmnd_"), gene_target_id, target) %>%
+        group_by(gene_target_id) %>%
+        summarize(gene_target_hit_n = n()) %>%
+        mutate(cytchm = case_when(
+          gene_target_id %in% sec_cytokines_chemokines ~ "Cytokine/Chemokine",
+          TRUE ~ "Other"
+        ))
+    ) %>%
+    bind_rows(.id = "DB")
+
+
+p_eid_counts <- eid_hit_stats %>%
+  mutate(DB = factor(DB, levels = c("UHGP-95", "UHGG", "hCom2"))) %>%
+  ggplot(., aes(
+      x = gene_target_hit_n,
+      y = fct_reorder(gene_target_id, gene_target_hit_n)
+    )) +
+      scale_x_log10() +
+      geom_col(aes(fill = cytchm), width = 0.7) +
+      labs(
+        x = "Number of unique homolog hits",
+        y = NULL,
+        fill = NULL
+      ) +
+      scale_fill_manual(values = c(
+        "Cytokine/Chemokine" = "red",
+        "Other" = "grey"
+      )) +
+      theme_bw() +
+        facet_grid(cols = vars(DB)) + # , space = "free_y", scales = "free_y") +
+      theme(legend.position = "top")
+
+ggsave(
+  glue(
+    "{wkdir}/figures/foldseek/",
+    "{Sys.Date()}_DIAMOND_EID-homolog-counts-barplot.png"
+  ),
+  p_eid_counts,
+  width = 10, height = 13
+)
+```
+
+![Number of homologs found for each gene-target-id across databases. Cytokines and chemokines are colored in red.](../figures/foldseek/2023-08-17_DIAMOND_EID-homolog-counts-barplot.png){#fig-eid-bars}
+
+
+
+
+
+
+![](../figures/foldseek/2023-08-17_DIAMOND_UHGG-Bacteria_eid-genome-heatmap.png)
+
+
+![](../figures/foldseek/2023-08-17_DIAMOND_UHGG-Archaea_eid-genome-heatmap.png)
+
+
+
+
+How are hits distributed across genomes within hCom2? This heatmap visualizes number of homologs within an ensembl ID across genomes.
+
+```{r, eval = FALSE}
+
+genome_eid_stats <- hcom_results_df %>%
+  group_by(dmnd_genome, gene_target_id) %>%
+  summarize(genome_hits = n(), .groups = "drop")
+
+genome_eid_stats_mat <- genome_eid_stats %>%
+  pivot_wider(
+    names_from = "gene_target_id",
+    values_from = "genome_hits",
+    values_fill = 0
+  ) %>%
+  column_to_rownames(var = "dmnd_genome")
+
+hcom2_order <- seriate_matrix_rows(genome_eid_stats_mat)
+eid_order <- seriate_matrix_rows(t(genome_eid_stats_mat))
+
+hcom_heatmap <- genome_eid_stats %>%
+  mutate(cytchm = case_when(
+    gene_target_id %in% sec_cytokines_chemokines ~ "Cytokine/Chemokine",
+    TRUE ~ "Other"
+  )) %>%
+  mutate(dmnd_genome = factor(dmnd_genome, levels = hcom2_order)) %>%
+  mutate(gene_target_id = factor(gene_target_id, levels = eid_order)) %>%
+  ggplot(aes(y = dmnd_genome, x = gene_target_id, fill = genome_hits)) +
+  geom_tile() +
+  labs(
+    x = NULL, y = NULL,
+    fill = "Unique Foldseek Targets\n with Homologs in Genome"
+  ) +
+  scale_fill_viridis_c(option = "F", limits = c(1, 200), oob = scales::squish) +
+  theme_bw() +
+  guides(fill = guide_colorbar(
+    title.position = "top",
+    title.hjust = 0.5,
+    title.theme = element_text(size = 12),
+    direction = "horizontal",
+    ticks = FALSE,
+    barwidth = 12,
+    barheight = 1,
+    label.theme = element_text(size = 10)
+  )) +
+  facet_grid(cols = vars(cytchm), space = "free", scales = "free") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+  )
+
+ggsave(
+  glue(
+    "{wkdir}/figures/foldseek/",
+    "{Sys.Date()}_DIAMOND_hCom2_eid-genome-heatmap.png"
+  ),
+  hcom_heatmap,
+  width = 16, height = 17,
+  dpi = 600
+)
+
+```
+
+![Structural homologs of immune modulatory proteins in hCom2 genomes. Heatmap displays the number of unique targets for all PDBs tested for a given gene-target-id that have homologs in a given genome. Only genomes with at least one homolog are shown. Genomes are ordered by the number of unique targets with homologs in the genome. Genes are grouped into cytokine/chemokine and other categories. Axes are ordered by euclidean optimal leaf ordering.](../figures/foldseek/2023-08-17_DIAMOND_hCom2_eid-genome-heatmap.png){#fig-hcom-heatmap}
+
+
+
+# Visually examining foldseek targets with homologs in relavent databases
+Note: needs to be updated to plot exact target PDBs
+
+
+
+
+loading in list of model alignment summaries.
+
+```{r}
+pdb_mod_summaries <- list.files(
+  glue("{wkdir}/data/interim/foldseek_results/top_pdb_models"),
+  full.names = TRUE
+) %>%
+  purrr::set_names(
+    basename(.) %>% str_remove_all("2023-08-07_|_.rds")
+  )
+
+```
+
+::: panel-tabset
+
+### TGFB1
+
+```{r}
+#| column: screen-inset-shaded
+#| layout-nrow: 1
+readRDS(pdb_mod_summaries[["TGFB1_ENSG00000105329"]])$TGFB1_ENSG00000105329$`1KLC.pdb_A`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["TGFB1_ENSG00000105329"]])$TGFB1_ENSG00000105329$`6GFF.pdb_E`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["TGFB1_ENSG00000105329"]])$TGFB1_ENSG00000105329$`AF-A0A7I2V5Z9-F1-model_v4.pdb`$ESMAtlas30$Unknown
+
+```
+
+### TGFB2
+```{r}
+#| column: screen-inset-shaded
+#| layout-nrow: 1
+readRDS(pdb_mod_summaries[["TGFB2_ENSG00000092969"]])$TGFB2_ENSG00000092969$`7RCO.pdb_B`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["TGFB2_ENSG00000092969"]])$TGFB2_ENSG00000092969$`6XM2.pdb_I`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["TGFB2_ENSG00000092969"]])$TGFB2_ENSG00000092969$`4KXZ.pdb_A`$ESMAtlas30$Unknown
+```
+
+### IL12B
+```{r}
+#| column: screen-inset-shaded
+#| layout-nrow: 1
+readRDS(pdb_mod_summaries[["IL12B_ENSG00000113302"]])$IL12B_ENSG00000113302$`5MJ3.pdb_A`$`Alphafold UniProt50`$Bacteria
+readRDS(pdb_mod_summaries[["IL12B_ENSG00000113302"]])$IL12B_ENSG00000113302$`5MJ3.pdb_A`$ESMAtlas30$Unknown
+
+```
+
+
+### C5
+```{r}
+#| column: screen-inset-shaded
+#| layout-nrow: 1
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`3PVM.pdb_A`$`Alphafold UniProt50`$Bacteria
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`5I5K.pdb_B`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`AF-P01031-F1-model_v4.pdb`$ESMAtlas30$Unknown
+```
+
+### IL6ST
+```{r}
+readRDS(pdb_mod_summaries[["IL6ST_ENSG00000134352"]])$IL6ST_ENSG00000134352$`AF-P40189-F1-model_v4.pdb`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["IL6ST_ENSG00000134352"]])$IL6ST_ENSG00000134352$`8D85.pdb_B`$`Alphafold UniProt50`$Bacteria
+readRDS(pdb_mod_summaries[["IL6ST_ENSG00000134352"]])$IL6ST_ENSG00000134352$`8D82.pdb_A`$ESMAtlas30$Unknown
+
+```
+
+:::
+
+Save up to 10k randomly selected homologus hits from uhgp95 for each gene of interest
+
+```{r, eval = FALSE}
+uhgp95_catalog <- glue("{protein_catalogs}/UHGP_v2.0.1/uhgp-95/uhgp-95.faa")
+pb <- progress_bar$new(total = length(unique(uhgp95_results_df$gene_target_id)),
+  format = "[:bar] :current/:total (:percent) :eta"
+  )
+for (goi in unique(uhgp95_results_df$gene_target_id)) {
+  output_fa <- glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "uhgp95_hits_fastas/{goi}_UHGP-95.fasta"
+  )
+  # check if file exists
+  pb$tick()
+  if (file.exists(output_fa)) next
+  gid_gene_hits <- uhgp95_results_df %>%
+    filter(gene_target_id == goi) %>%
+    pull(dmnd_target) %>%
+    unique()
+
+  # randomly sample up to 10,000 genes
+  if (length(gid_gene_hits) > 10000) {
+    set.seed(42)
+    gid_gene_hits %<>% sample(10000)
+  }
+
+  extract_seq_from_catalog(
+    fasta_header_list = list(gid_gene_hits),
+    output_fasta_path = output_fa,
+    catalog_path = uhgp95_catalog
+  )
+}
+
+```
+
+fasta gene description wordcloud function
+
+```{r, eval = FALSE}
+fasta_wordcloud <- function(fasta_path) {
+  require(dplyr)
+  require(glue)
+  gid <- stringr::str_remove(basename(fasta_path), '_UHGP-95.fasta')
+  fas <- seqinr::read.fasta(fasta_path)
+  gene_annot <- seqinr::getAnnot(fas) %>%
+    unlist() %>%
+    strex::str_after_first(., " ")
+  gene_desc <- data.frame(
+    word = gene_annot
+  ) %>%
+    group_by(word) %>%
+    summarise(freq = n()) %>% mutate(freq = log2(freq + 1)) %>%
+    arrange(desc(freq))
+  set.seed(42)
+  colpal <- ggsci::pal_d3(palette = "category10", alpha = 1)(4)
+
+  svg(
+    glue(
+      "{wkdir}/figures/foldseek/uhgp95_gene_annotation_wordclouds/",
+      "{Sys.Date()}_{gid}.svg"
+    ),
+    width = 7, height = 7
+  )
+  p <- wordcloud::wordcloud(
+    words = gene_desc$word, freq = gene_desc$freq, min.freq = 1,
+    max.words = 200, random.order = FALSE,
+    scale = c(4, .5),
+    colors = colpal
+  ) %>%
+    suppressWarnings()
+  print(p)
+  dev.off()
+}
+
+```
+
+Plotting gene description wordclouds for up to 10k uhgp homologs to each gene of interest.
+
+```{r, eval = FALSE}
+uhgp_fasta_hits <- list.files(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "uhgp95_hits_fastas"
+  ),
+  full.names = TRUE
+)
+uhgp_fasta_hits %>%
+  purrr::set_names(str_remove(basename(.), "_UHGP-95.fasta")) %>%
+  purrr::walk( ~ fasta_wordcloud(.x))
+
+```
+
+
+Next we will do a deep dive into the top hits for each gene of interest. We will use the following criteria to select the top hits:
+
+- Visually examine structural similarity of FoldSeek targets with hCom2/UHGG homologs
+- Examine sequence similarity of FoldSeek targets with hCom2 homologs
+- Fold a subset of hCom2 proteins of interest and structurally align with Foldseek targets & Human PDB structures.
+- Using human receptor/ligand pairs, bind Foldseek & hCom2 proteins to human receptors and examine binding interfaces.
+- Calculate some measure of binding affinity of PPI-interface and compare between Human/FoldSeek/hCom2 proteins.
+ 
+
+### Sequence similarity across workflow layers
+
+How does sequence similarity to the original human UniProt sequence propogate throughout our search? Do sequences become increasingly dissimilar to the original sequence? 
+
+As these genes below to the synthetic hCom2 community, reference genomes should be relatively safe from human DNA contamination, making our sequence similarity metrics more trustworthy than UHGG results. When PDB structures are jointly available in both RCSB and AF2, it will be useful to compare foldseek results and downstream homology detection in hCom2, as some AF2 sequences will contain accessory regions which may be proteolytically cleaved prior to activation of the protein.
+
+
+To answer this question, we will use the Smith-Waterman (local) alignment algorithm to compare the sequence similarity between the original human UniProt sequence and the following:
+
+- Original human seq
+- Query_pdb files
+- Foldseek results
+- hCom2 results
+
+```{mermaid}
+%%| fig-width: 8
+sequenceDiagram
+  title Smith-Waterman (local) Alignment Pairs
+  Human Gene [UniProt]->>PDBs [RCSB/AF2]: 
+  Human Gene [UniProt]->>PDBs [Foldseek Hits]: 
+  Human Gene [UniProt]->>hCom2 Hits: 
+  PDBs [RCSB/AF2]->>PDBs [Foldseek Hits]: 
+  PDBs [RCSB/AF2]->>hCom2 Hits: 
+  PDBs [Foldseek Hits]->>hCom2 Hits: 
+
+```
+
+Collecting fasta sequences across layers of the workflow
+
+```{r, eval = FALSE}
+# 1) Get fasta sequences from original human gene target
+gtid_aa <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-04-26_signalp-trimmed-sequence-df.rds"
+  )
+) %>%
+  dplyr::rename(gene_target_id = id)
+
+# 2) query_pdb files (AF or RCSB)
+goi_df_trim_clean %>% glimpse
+future::plan(multisession, workers = 24)
+query_fa_df <- goi_df_trim_clean %>%
+  ungroup() %>% 
+  mutate(query_aa = furrr::future_map2_chr(
+    query_pdb_path, query_chain,
+    ~ load_trimmed_pdb(.x, .y) %>% extract_fasta_from_pdb(),
+    .options = furrr_options(seed = T)
+  ))
+future::plan(sequential)
+
+# 3) foldseek results (AF or RCSB)
+target_fasta_paths <-
+  list.files(glue("{wkdir}/data/interim/foldseek_results/target_fasta"),
+    full.names = TRUE
+  )
+target_fasta_paths_tois <- target_fasta_paths %>%
+  keep(fs::path_ext_remove(basename(.)) %in% tois)
+
+future::plan(multisession, workers = 8)
+target_fa_list <- target_fasta_paths_tois %>%
+  purrr::set_names(basename(.) %>% gsub(".faa$", "", .)) %>%
+  furrr::future_map(
+    ~ seqinr::read.fasta(., seqtype = "AA") %>%
+      seqinr::getSequence(as.string = TRUE) %>%
+      unlist(recursive = TRUE)
+  )
+
+target_fa_df <- data.frame(
+  foldseek_target_aa = unlist(target_fa_list)) %>%
+  rownames_to_column("target")
+
+# 4 ) hCom2 results (AF or RCSB)
+hcom_seqs <- seqinr::read.fasta(hcom2_select_fa, seqtype = "AA")
+hcom2_fa_seqs <- names(hcom_seqs) %>%
+  purrr::map(
+    ~ seqinr::getSequence(hcom_seqs[[.]], as.string = TRUE) %>%
+      unlist() %>%
+      gsub("\\*", "", .)
+  )
+
+hcom2_fa_df <- data.frame(
+  dmnd_target = names(hcom_seqs),
+  hcom2_target_aa = unlist(hcom2_fa_seqs)
+) %>%
+  left_join(hcom_results_df_keytargets, by = "dmnd_target")
+
+full_seq_df <- hcom2_fa_df %>%
+  left_join(target_fa_df) %>%
+  left_join(query_fa_df) %>%
+    dplyr::left_join(gtid_aa)
+
+# Merging fasta sequences into table with metadata.
+saveRDS(
+ full_seq_df,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_FASTA_hCom2-Foldseek-QueryPDB-GTID.rds"
+  )
+)
+
+```
+
+Calculating pairwise alignments for all hCom2 proteins of interest with human and foldseek source AAs.
+```{r, eval = FALSE}
+full_seq_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-23_FASTA_hCom2-Foldseek-QueryPDB-GTID.rds"
+  )
+)
+
+# Make a list of all pairwise combinations of sequences to align
+pair1_list <-
+  c(
+    rep("sequences_aa_signalp_trimmed", 3),
+    rep("query_aa", 2),
+    "foldseek_target_aa"
+  )
+pair2_list <-
+  c(
+    "query_aa",
+    "foldseek_target_aa",
+    "hcom2_target_aa",
+    "foldseek_target_aa",
+    "hcom2_target_aa",
+    "hcom2_target_aa"
+  )
+
+group_dict = list(
+  "sequences_aa_signalp_trimmed" = "gene_target_id",
+  "query_aa" = "query_pdb",
+  "foldseek_target_aa" = "target",
+  "hcom2_target_aa" = "dmnd_target"
+)
+
+seq_aln_df <- tibble()
+future::plan(multisession, workers = 14)
+for (i in 1:length(pair1_list)) {
+  pair1 <- pair1_list[[i]]
+  pair2 <- pair2_list[[i]]
+  seqpair = glue("SW_score_{pair1}__{pair2}")
+  message(seqpair, "\n")
+
+  batch_seq_df <-
+    full_seq_df %>%
+    ungroup() %>%
+    select(
+      tidyselect::all_of(c(
+        group_dict[[pair1]],
+        group_dict[[pair2]],
+        pair1,
+        pair2
+      ))
+    ) %>%
+    distinct() %>%
+    mutate(
+      local_sequence_sim = furrr::future_map2(
+        !!sym(pair1), !!sym(pair2),
+        ~ protr::twoSeqSim(
+          .x, .y,
+          type = "local", submat = "BLOSUM62"
+        )
+      ),
+      seq_1 = !!sym(pair1), 
+      seq_2 = !!sym(pair2),
+      seq_1_name = !!sym(group_dict[[pair1]]), 
+      seq_2_name = !!sym(group_dict[[pair2]]),
+      group_1 = pair1,
+      group_2 = pair2,
+      seq_pair = glue("{pair1}__{pair2}")
+    ) %>%
+    select(
+      seq_1, seq_1_name, 
+      seq_2, seq_2_name, seq_pair,
+      local_sequence_sim,
+      group_1, group_2
+    )
+  seq_aln_df %<>% bind_rows(batch_seq_df)
+}
+future::plan(sequential)
+seq_aln_df %<>%
+  mutate(
+    SW_score = purrr::map_dbl(local_sequence_sim, ~ unlist(.)@score),
+    SW_fident = purrr::map_dbl(local_sequence_sim, extract_sw_fident)
+  )
+
+# reformating sequence alignment dataframe
+merged_aln_df <- full_seq_df
+for (pr in unique(seq_aln_df$seq_pair)) {
+  temp_df <- seq_aln_df %>%
+    filter(seq_pair == pr)
+
+  pair <- unique(temp_df$seq_pair) %>%
+    # gsub("SW_", "", .) %>%
+    str_split("__") %>%
+    unlist()
+  temp_df %<>%
+    select(-c(group_1, group_2)) %>%
+  pivot_wider(
+    names_from = "seq_pair",
+    values_from = c("local_sequence_sim", "SW_score", "SW_fident")
+  )
+  colnames(temp_df)[1:4] <- c(
+    pair[1], group_dict[[pair[1]]],
+    pair[2], group_dict[[pair[2]]]
+  )
+  merged_aln_df %<>% full_join(temp_df)
+}
+
+saveRDS(
+ merged_aln_df,
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "{Sys.Date()}_FASTA_hCom2-Foldseek-QueryPDB-GTID-SW-scoresF.rds"
+  )
+)
+```
+
+Visualizing Results
+
+
+
+```{r}
+merged_aln_df <- readRDS(
+  glue(
+    "{wkdir}/data/interim/foldseek_results/",
+    "2023-08-24_FASTA_hCom2-Foldseek-QueryPDB-GTID-SW-scoresF.rds"
+  )
+)
+
+gtid_cols <-c(
+  brewer.pal(8, "Accent"),
+  brewer.pal(8, "Set2")
+)
+names(gtid_cols) <- merged_aln_df$gene_target_id %>% unique
+```
+
+![Overall density distribution of Smith-Waterman (local) sequence alignment across the 16 human genes of interest with detection in hCom2](../figures/foldseek/2023-08-24_SW-fident-density.png){#fig-SW-density column="page"}
+
+![Gene specific density distribution of Smith-Waterman (local) sequence alignments.](../figures/foldseek/2023-08-24_SW-fident-density-facet-by-gtid.png){#fig-SW-density-facet}
+
+
+
+```{r}
+#| label: fig-human-pdbs_to_hcom2-pdbs
+#| fig-cap: Smith-Waterman (local) Sequence similarity comparisons between 1) Human PDBs (AF2/RCSB) to hCom2 homology hits and 2) Foldseek hits to hCom2 homology hits. Each point represents a unique hCom2 gene with sequence homology to a FoldSeek jot. Points are colored by the original human gene used in the search. Points are faceted by PDB source (AF2/RCSB).
+#| column: page
+
+p2 <- merged_aln_df %>%
+  ggplot(aes(
+    SW_score_query_aa__hcom2_target_aa,
+    SW_fident_foldseek_target_aa__hcom2_target_aa
+  )) +
+  geom_point(aes(
+    color = gene_target_id
+  ), alpha = 0.9) +
+    facet_wrap( ~pdb_source, ncol = 2) +
+  labs(
+    x = "% Identity (Human RCSB/AF2 PDBs to hCom2 Hits)",
+    y = "% Identity (Microbial Foldseek Hits to hCom2 Hits)",
+    color = "Smith-Waterman Score\n(Foldseek Hit to hCom2 Hit)"
+  ) +
+  scale_color_manual(values = gtid_cols) +
+  theme_bw()
+
+ggplotly(p2)
+```
+
+**Key Takeaways**
+
+- As expected, on average the sequence similarities between Human UniProt genes and available RCSB/AF2 PDBs are high, along with similarities between Foldseek hits and hCom2 hits. @fig-SW-density
+- Interestingly, when visualized by individual human immune genes @fig-SW-density-facet, we observe much less consistent trends, with some %identities showing conceringly low values between Foldseek hits and hCom2 hits, since hCom2 hits were identifed using DIAMOND searches with these proteins.
+- In @fig-human-pdbs_to_hcom2-pdbs, we can observe some PDB source specific features which require further inspection for quality control. This includes TGFB1/2, CD8B, and CD28.
+- Finally, with the exception of C5, almost all hCom2 hits show low sequence similarity to the original UniProt Human Immune gene @fig-human-pdbs_to_hcom2-pdbs. Other genes with interesting signals include **IL6ST**, **IL12B**, **CD79A/B**, and **CD86** which show high sequence similarity between Foldseek and hCom2 hits, but low sequence similarity between Human PDBs and hCom2 hits. This may be due to the fact that Foldseek hits are not necessarily the same as the original human gene, but rather a homologous protein with similar function. This is a good thing, as it means we are not simply finding the same protein in the environment, but rather a protein with similar function. However, this also means that we need to be careful when selecting Foldseek hits for further analysis, as they may not be the same protein as the original human gene. This is especially important for genes with low sequence similarity between Human PDBs and hCom2 hits, as we may be selecting a protein with a different function than the original human gene.
+
+
+```{r, eval = FALSE}
+merged_aln_df %>% glimpse
+grph_df <- merged_aln_df %>%
+  select(dmnd_genome, target, dmnd_bitscore, gene_target_id) %>%
+  distinct()
+grph_df %>% glimpse
+
+# Create a tbl_graph with metadata
+node_df1 <- grph_df %>%
+  select(-c(dmnd_genome, dmnd_bitscore)) %>%
+  pivot_longer(!gene_target_id) %>%
+  distinct() %>%
+  select(-name) %>% 
+  mutate(rownum = rownames(.)) %>%
+  pivot_longer(!rownum) %>% 
+  distinct() %>%
+  glimpse()
+
+edge_df1 <- grph_df %>%
+  select(from = target, to = gene_target_id, dmnd_bitscore) %>%
+  distinct() %>%
+  glimpse()
+
+grph_gtid_targets <- tbl_graph(
+  nodes = node_df1,
+  edges = edge_df1,
+  node_key = "value"
+)
+grph_gtid_targets
+
+set.seed(42)
+p_grph_gtid_targets <- grph_gtid_targets %>%
+  filter(!node_is_isolated()) %>%
+  activate(nodes) %>%
+  mutate(node_col = case_when(
+    name == "gene_target_id" ~ value,
+    TRUE ~ ""
+  )) %>%
+  ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = 1 / 1.5 * dmnd_bitscore),
+    color = "black"
+    ) +
+    geom_node_point(
+      aes(fill = node_col, shape = name, size = name),
+      shape = 21
+    ) +
+    geom_node_text(aes(label = node_col), fontface = "bold", hjust = "outward", size = 3) +
+      theme_void() +
+      scale_fill_manual(values = gtid_cols) +
+      scale_size_manual(values = c("value" = 2, "gene_target_id" = 6)) +
+      coord_fixed() +
+      expand_limits(x = c(-25, 20)) +
+    theme(legend.position = "none")
+
+ggsave(
+  glue("{wkdir}/figures/foldseek/{Sys.Date()}_tidygraph_gtid-targets.png"),
+  p_grph_gtid_targets,
+  width = 15, height = 10,
+  dpi = 600
+)
+
+node_df <- grph_df %>%
+  select(-dmnd_bitscore) %>%
+  pivot_longer(-gene_target_id) %>%
+  distinct()
+edge_df <- grph_df %>%
+  select(from = dmnd_genome, to = target, dmnd_bitscore) %>%
+  distinct()
+grph <- tbl_graph(
+  nodes = node_df,
+  edges = edge_df,
+  node_key = "value"
+)
+grph
+
+p_species_grph <- grph %>%
+  filter(!node_is_isolated()) %>%
+  activate(nodes) %>%
+  mutate(node_genome_col = case_when(
+    name == "dmnd_genome" ~ value,
+    TRUE ~ "target"
+  )) %>%
+  ggraph(layout = "stress") +
+  geom_edge_link(aes(edge_alpha = 1 / 2*dmnd_bitscore), color = "black") +
+  geom_node_point(
+    aes(fill = node_genome_col, shape = name, size = name), shape = 21
+    ) +
+  theme_void() +
+    scale_fill_viridis_d(option = "H") +
+    scale_size_manual(values = c("target" = 2, "dmnd_genome" = 3)) +
+    coord_fixed() +
+    labs(title = "Network with Nodes Colored by gene_target_id") +
+    theme(legend.position = "none")
+
+
+```
+
+# Methods
+
+```{r}
+sessionInfo()
+```
