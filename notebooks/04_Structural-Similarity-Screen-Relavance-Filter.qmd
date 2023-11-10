@@ -1240,6 +1240,15 @@ p2 <- merged_aln_df %>%
 ggplotly(p2)
 ```
 
+```{r}
+merged_aln_df %>% glimpse
+merged_aln_df %>% #pull(SW_fident_foldseek_target_aa__hcom2_target_aa)
+  filter(SW_fident_foldseek_target_aa__hcom2_target_aa > 60 ) %>% 
+  View
+  glimpse
+
+```
+
 **Key Takeaways**
 
 - As expected, on average the sequence similarities between Human UniProt genes and available RCSB/AF2 PDBs are high, along with similarities between Foldseek hits and hCom2 hits. @fig-SW-density

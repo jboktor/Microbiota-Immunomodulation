@@ -1,0 +1,298 @@
+---
+title: "AlphaFold Multimer Complex Docking - tR01 POC"
+editor: visual
+author: "Joe Boktor"
+date: '2023-11-03'
+format: 
+  html:
+    page-layout: full
+    font-family: helvetica neueu
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+Analysis Setup
+
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(glue)
+library(fs)
+library(bio3d)
+library(ggpackets)
+library(ggpointdensity)
+library(viridis)
+library(ggside)
+library(r3dmol)
+library(seriation)
+library(ggmsa)
+library(patchwork)
+library(gghalves)
+library(ggdist)
+library(protr)
+library(reticulate)
+library(readxl)
+library(gtools)
+# Plotting functions
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+docking_dir <- "/central/scratch/jboktor/afmultimer_runs/tRO1_POC/2023-11-03"
+fa_dir <- "/central/groups/MazmanianLab/joeB/docking/2023-11-03_tRO1_POC"
+```
+
+
+R utility function for running alphafold with slurm
+
+```{r}
+slurm_run_alphafold <- function(jobname,
+                                slurm_out,
+                                input_fasta,
+                                output_dir,
+                                mode = "multimer",
+                                walltime = "1-00:00",
+                                use_gpu = "True",
+                                mem = "128G",
+                                gpus = 1,
+                                cpus_per_task = 8) {
+  shell_do(
+    glue(
+      "sbatch",
+      " --job-name={jobname}",
+      " --output={slurm_out}/{jobname}.out",
+      " --error={slurm_out}/{jobname}.err",
+      " --time={walltime}",
+      " --gres=gpu:{gpus}",
+      " --mem={mem}",
+      " --cpus-per-task={cpus_per_task}",
+      " {src_dir}/shell-scripts/alphafold.sub",
+      " -g {use_gpu}",
+      " -i {input_fasta}",
+      " -o {output_dir}",
+      " -m {mode}", 
+      " -n 3" # number of models to generate
+    )
+  )
+}
+
+```
+
+Load in Excel sheet 
+
+```{r}
+raw_data <- read_excel(
+  glue("{wkdir}/data/interim/alphafold-multimer/HIP 2.0 Library Log updated.xlsx"), 
+  sheet = "PoC Protein Characteristics"
+)
+
+clean_df <- raw_data %>%
+  janitor::clean_names() %>%
+  drop_na(ecd_sequence)
+
+```
+
+Dataframe metadata
+
+```{r}
+clean_df %>% DT::datatable(options = list(scrollX = TRUE))
+```
+
+
+Saving individual fasta files for all proteins
+
+```{r, eval=FALSE}}
+fa_dir_mono <- "/central/groups/MazmanianLab/joeB/docking/2023-11-03_tRO1_POC_monomers"
+dir.create(fa_dir_mono, recursive = TRUE, showWarnings = FALSE)
+
+# save fasta pair files
+for (i in 1:nrow(clean_df)) {
+  message("Saving protein: ", clean_df[i, "uni_prot_name"])
+  fa_out <- glue("{fa_dir_mono}/{clean_df[i, 'uni_prot_name']}.fasta")
+  bio3d::write.fasta(
+    seqs = clean_df$ecd_sequence[[i]],
+    ids = clean_df$uni_prot_name[[i]],
+    file = fa_out
+  )
+}
+
+```
+
+Executing AlphaFold on Monomers
+Prepping multimer job submission data
+
+```{r}
+fa_input_paths_mono <- list.files(fa_dir_mono, full.names = TRUE)
+batch_input_df_mono <- data.frame(
+  "fa_path" = fa_input_paths_mono
+  ) %>% 
+  mutate(
+    uni_prot_name = fs::path_ext_remove(basename(fa_path))
+  ) %>%
+  left_join(clean_df, by = c("uni_prot_name"))
+
+batch_input_df_mono %>% DT::datatable(options = list(scrollX = TRUE))
+
+```
+
+Submitting jobs - Executing Alphafold Multimer
+
+```{r, eval=FALSE}
+cluster_reports <- glue(
+  "{wkdir}/.cluster_runs/",
+  "{get_time()}_AF-Mono_tR01-POC"
+)
+message("\n\n CREATING:  ", cluster_reports, "\n")
+shell_do(glue("mkdir -p {cluster_reports}"))
+
+for (i in 1:nrow(batch_input_df_mono)) {
+  slurm_run_alphafold(
+    jobname = batch_input_df_mono$uni_prot_name[i],
+    slurm_out = cluster_reports,
+    input_fasta = batch_input_df$fa_path[i],
+    walltime = "24:00:00",
+    mem = "64G",
+    gpus = 1,
+    cpus_per_task = 4,
+    output_dir = glue("/central/scratch/jbok/alphafold-multimer/tRO1_POC_2023-11-10_monomer")
+  )
+}
+
+```
+
+Creating pairwise fasta files for all combinations of proteins
+
+```{r}
+seqlist <- c(clean_df$ecd_sequence)
+names(seqlist) <- clean_df$uni_prot_name
+
+seq_pairs <- gtools::combinations(
+  n = length(seqlist),
+  r = 2, 
+  v = seqlist,
+  repeats.allowed = TRUE
+  ) %>% 
+  as.data.frame() %>%
+  dplyr::rename(
+    seq1 = V1,
+    seq2 = V2
+  )
+name_pairs <- gtools::combinations(
+  n = length(seqlist),
+  r = 2, 
+  v = names(seqlist),
+  repeats.allowed = TRUE
+  ) %>% 
+  as.data.frame() %>%
+  dplyr::rename(
+    name1 = V1,
+    name2 = V2
+  )
+
+pair_df <- bind_cols(
+  seq_pairs,
+  name_pairs,
+) %>%
+  mutate(total_aa = nchar(seq1) + nchar(seq2)) %>%
+  mutate(walltime_bin = case_when(
+    total_aa < 400 ~ "6:00:00",
+    total_aa < 800 ~ "16:00:00",
+    total_aa < 1200 ~ "24:00:00",
+    TRUE ~ "48:00:00"
+    )) %>%
+  filter(name1 %nin% c("O00300", "O75023")) %>% 
+  arrange(total_aa)
+
+# pair_df %>% glimpse
+```
+
+
+Saving fasta file pairs
+
+
+```{r, eval=FALSE}
+dir.create(fa_dir, recursive = TRUE, showWarnings = FALSE)
+# save fasta pair files
+for (i in 1:nrow(pair_df)) {
+  message("Pair 1: ", pair_df$name1[i], " Pair 2: ", pair_df$name2[i])
+
+  fa_out <- glue("{fa_dir}/{pair_df$name1[i]}_{pair_df$name2[i]}.fasta")
+  bio3d::write.fasta(
+    seqs = unname(pair_df[i, "seq1"]),
+    ids = pair_df[i, "name1"],
+    file = fa_out
+  )
+  bio3d::write.fasta(
+    seqs = unname(pair_df[i, "seq2"]),
+    ids = pair_df[i, "name2"],
+    file = fa_out,
+    append = TRUE
+  )
+}
+
+```
+
+
+Prepping multimer job submission data
+
+```{r}
+fa_input_paths <- list.files(fa_dir, full.names = TRUE)
+batch_input_df <- data.frame(
+  "fa_path" = fa_input_paths
+  ) %>% 
+  mutate(
+    id = fs::path_ext_remove(basename(fa_path))
+  ) %>%
+  separate(
+    col = id,
+    into = c("name1", "name2"),
+    sep = "_",
+    remove = FALSE
+  ) %>%
+  left_join(pair_df, by = c("name1", "name2")) %>%
+  drop_na(walltime_bin) %>%
+  arrange(total_aa)
+
+batch_input_df %>% DT::datatable(options = list(scrollX = TRUE))
+
+```
+
+Submitting jobs - Executing Alphafold Multimer
+
+```{r, eval=FALSE}
+
+cluster_reports <- glue(
+  "{wkdir}/.cluster_runs/",
+  "{get_time()}_AFMultimer_tR01-POC"
+)
+message("\n\n CREATING:  ", cluster_reports, "\n")
+shell_do(glue("mkdir -p {cluster_reports}"))
+
+for (i in 1:nrow(batch_input_df)) {
+  slurm_run_alphafold(
+    jobname = batch_input_df$id[i],
+    slurm_out = cluster_reports,
+    input_fasta = batch_input_df$fa_path[i],
+    walltime = batch_input_df$walltime_bin[i],
+    mem = "64G",
+    gpus = 1,
+    cpus_per_task = 4,
+    output_dir = glue("/central/scratch/jbok/alphafold-multimer/tRO1_POC_2023-11-04")
+  )
+}
+
+```
+
+```{r}
+sessionInfo()
+```

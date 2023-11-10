@@ -1,0 +1,102 @@
+---
+title: "TEST"
+editor: visual
+author: "Joe Boktor"
+date: '2023-07-22'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+    grid:
+      sidebar-width: 300px
+      body-width: 900px
+      margin-width: 300px
+      gutter-width: 1.5rem
+bibliography: references.bib
+---
+
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(bio3d)
+library(protr)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(strex)
+library(data.table)
+library(kableExtra)
+# Plotting functions
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+library(plotly)
+library(ggsci)
+library(viridis)
+library(ggforce)
+library(seriation)
+# protein structure analysis
+library(bio3d)
+library(r3dmol)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+"{homedir}/Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R-scripts/helpers_general.R"))
+source(glue("{src_dir}/R-scripts/helpers_pdb-wrangling.R"))
+protein_catalogs <- glue("{homedir}/Downloads/protein_catalogs")
+# 1.5gb  limit (1500*1024^2 = 1572864000)
+options(future.globals.maxSize= 1572864000)
+```
+
+
+loading in list of model alignment summaries.
+
+```{r}
+pdb_mod_summaries <- list.files(
+  glue("{wkdir}/data/interim/foldseek_results/top_pdb_models"),
+  full.names = TRUE
+) %>%
+  purrr::set_names(
+    basename(.) %>% str_remove_all("2023-08-07_|_.rds")
+  )
+
+```
+
+::: panel-tabset
+
+### C5
+```{r}
+#| column: screen-inset-shaded
+#| layout-nrow: 1
+
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`3PVM.pdb_A`$`Alphafold UniProt50`$Bacteria
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`5I5K.pdb_B`$ESMAtlas30$Unknown
+readRDS(pdb_mod_summaries[["C5_ENSG00000106804"]])$C5_ENSG00000106804$`AF-P01031-F1-model_v4.pdb`$ESMAtlas30$Unknown
+
+
+```
+
+:::

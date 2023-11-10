@@ -27,7 +27,7 @@ slurm_run_alphafold <- function(jobname,
       " -i {input_fasta}",
       " -o {output_dir}",
       " -m {mode}", 
-      " -n 2" # number of models to generate
+      " -n 5" # number of models to generate
     )
   )
 }

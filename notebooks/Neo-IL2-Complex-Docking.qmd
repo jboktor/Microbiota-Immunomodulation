@@ -1,0 +1,662 @@
+---
+title: "Neo IL2 Complex Docking"
+editor: visual
+author: "Joe Boktor, Alec Lourenço"
+date: '2023-03-26'
+format: 
+  html:
+    page-layout: full
+    font-family: helvetica neueu
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+```{css}
+@media (min-width: 30em) {
+  .panel-tabset {
+  	display: grid;
+  	grid-gap: 2em;
+  	grid-template-columns: 25% 75%;
+  }
+  .panel-tabset-tabby {
+    border-bottom: none !important;
+  	border-right: 1px solid #bbb; 
+  }
+  .panel-tabset [role=tab][aria-selected=true] {
+    background-color: transparent;
+    border: 1px solid #bbb !important;
+  }
+  h3 {
+  	margin-top: 0;
+  }
+}
+```
+
+### AlphaFold Multimer Complex Docking
+Analysis Setup
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(glue)
+library(fs)
+library(bio3d)
+library(ggpackets)
+library(ggpointdensity)
+library(viridis)
+library(ggside)
+library(r3dmol)
+library(seriation)
+library(ggmsa)
+library(patchwork)
+library(gghalves)
+library(ggdist)
+library(protr)
+library(reticulate)
+# Plotting functions
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R-scripts/helpers_general.R"))
+docking_dir <- "/central/groups/MazmanianLab/joeB/docking"
+proj_dir <- glue("{docking_dir}/projects/neo2_variants")
+analysis_dir <- glue("{proj_dir}/structural_analysis")
+neo_dir <- glue("{proj_dir}/ESM_PDBs")
+
+```
+
+Converting PDBs into FASTA (rec/lig pairs)
+```{r, eval=FALSE}
+pdb_paths <- list.files(neo_dir, full.names = TRUE) %>%
+  grep("pnon|pmin", ., value = TRUE, invert = TRUE)
+il2_variants <- pdb_paths %>% grep("MPNN|alpha", ., value = TRUE)
+
+# IL2 RECEPTORS
+Il2rb <- bio3d::read.fasta(glue("{proj_dir}/Il2rb.fasta"))
+Il2rg <- bio3d::read.fasta(glue("{proj_dir}/Il2rg.fasta"))
+
+# IL2 VARIANTS
+fasta_dir <-
+  "/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/fastas"
+for (pdb_path in il2_variants) {
+  pdb <- bio3d::read.pdb(pdb_path)
+  clean_pdb <- clean.pdb(pdb,
+    consecutive = TRUE, force.renumber = TRUE,
+    fix.chain=TRUE, fix.aa = TRUE, rm.wat = TRUE, rm.lig = TRUE, verbose = TRUE
+  )
+  il2_fasta <-
+    bio3d::pdbseq(
+      clean_pdb,
+      atom.select(clean_pdb, "calpha"),
+      aa1 = TRUE
+    ) %>%
+    bio3d::as.fasta()
+
+  # save fasta file with receptor and unique il2 variant
+  output_fasta <- glue(
+    "{fasta_dir}/IL2RBG_{basename(path_ext_remove(pdb_path))}.fasta"
+  )
+
+  bio3d::write.fasta(Il2rb,
+    file = output_fasta,
+    ids = "Il2rb"
+  )
+  bio3d::write.fasta(Il2rg,
+    file = output_fasta,
+    ids = "Il2rg",
+    append = TRUE
+  )
+  bio3d::write.fasta(il2_fasta,
+    file = output_fasta,
+    ids = basename(path_ext_remove(pdb_path)),
+    append = TRUE
+  )
+}
+```
+
+Executing multimer
+```{r, eval=FALSE}
+cluster_reports <- glue(
+  "{wkdir}/.cluster_runs/",
+  "{Sys.Date()}_AFMultimer_NEO-IL2-DOCKING_{rand_string()}"
+)
+message("\n\n CREATING:  ", cluster_reports, "\n")
+shell_do(glue("mkdir -p {cluster_reports}"))
+
+complex_fastas <-
+  list.files(fasta_dir, full.names = TRUE)
+
+for (complex_path in complex_fastas) {
+  jname <- fs::path_ext_remove(basename(complex_path))
+  slurm_run_alphafold(
+    jobname = jname,
+    slurm_out = cluster_reports,
+    input_fasta = complex_path,
+    walltime = "06:00:00",
+    mem = "32G",
+    gpus = 1,
+    cpus_per_task = 8,
+    output_dir = glue("/central/scratch/jbok/alphafold-multimer/2023-03-26_neo-IL2/{jname}")
+  )
+}
+
+```
+
+
+Reading in multimer model pkl results
+```{r, eval=FALSE}
+reticulate::use_condaenv(condaenv = "pdmbsR", required = TRUE)
+source_python(glue("{src_dir}/python-scripts/pickle_reader.py"))
+```
+
+Extracting metrics of interest
+```{r, eval=FALSE}
+# list all model pkl files ----
+output_dir <-
+  glue(
+    "/central/scratch/jbok/alphafold-multimer/2023-03-26_neo-IL2"
+  )
+model_pkl_paths <-
+  list.files(
+    output_dir, pattern = ".pkl", 
+    full.names = TRUE, recursive = TRUE
+  ) %>%
+  keep(!grepl("features", .))
+
+extract_pkl_results <- function(pkl_path) {
+  pkl <- read_pickle_file(pkl_path)
+  data_out <- list(
+    pkl_path = pkl_path,
+    ptm = pkl$ptm,
+    iptm = pkl$iptm,
+    max_predicted_aligned_error = pkl$max_predicted_aligned_error,
+    ranking_confidence = pkl$ranking_confidence
+  )
+  return(data_out)
+}
+
+performance_results <- 
+  purrr::map_dfr(model_pkl_paths, ~ extract_pkl_results(.))
+saveRDS(
+  performance_results,
+  glue("{proj_dir}/multimer_performance_results.rds")
+)
+```
+
+Visualizing model iPTM scores
+```{r, eval=FALSE}
+performance_results <- readRDS(
+  glue("{proj_dir}/multimer_performance_results.rds")
+)
+peformance_df <-
+  performance_results %>%
+  mutate(
+    complex = basename(dirname(pkl_path)),
+    model_name = basename(pkl_path),
+    ranking_score = ptm + iptm
+  )
+  
+p_iptms <- peformance_df %>%
+  ggplot(aes(x = fct_reorder(complex, iptm), y = iptm)) +
+  ggdist::stat_interval(
+    .width = c(.25, 0.5, .75, 1),
+    show.legend = T,
+    height = 0.0001
+  ) +
+  gghalves::geom_half_point(
+    side = "l", range_scale = .3, alpha = 0.8,
+    shape = 21, color = "black", size = 1.5
+  ) +
+  scale_color_brewer(palette = "PuBuGn") +
+  theme_light() +
+  coord_flip() +
+  labs(y = "iPTM", x = NULL, color = "interval") +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "top"
+  )
+
+ggsave(
+  glue("{proj_dir}/structural_analysis/figures/iptm.png"),
+  p_iptms, width = 5, height = 7, dpi = 600
+  )
+```
+
+![iPTM distributions](/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/structural_analysis/figures/iptm.png){#fig-iptms height=6.5in}
+
+### Comparative Structural Analysis
+
+Generating 3D visuals
+```{r,eval=FALSE}
+#| output: false
+af_pdb_paths <- list.files(
+  "/central/scratch/jbok/alphafold-multimer/2023-03-26_neo-IL2",
+  full.names = TRUE, recursive = TRUE, pattern = "ranked_0.pdb"
+)
+
+pdb_list <- list()
+af_models <- list()
+for (af_model in af_pdb_paths) {
+  pair <- basename(dirname(dirname(af_model)))
+  message("Processing: ", pair)
+  pdb_list[[pair]] <- bio3d::read.pdb(af_model)
+  af_models[[pair]] <- r3dmol(
+    viewer_spec = m_viewer_spec(
+      cartoonQuality = 10,
+      lowerZoomLimit = 250,
+      upperZoomLimit = 2000
+    )
+  ) %>%
+    m_add_model(data = m_bio3d(pdb_list[[pair]])) %>%
+    m_add_surface(style = m_style_surface(opacity = 0.4)) %>%
+    m_set_style(style = m_style_cartoon()) %>%
+    m_set_style(
+      sel = m_sel(chain = "A"),
+      style = m_style_cartoon(color = "#FC027E")
+    ) %>%
+    m_set_style(
+      sel = m_sel(chain = "B"),
+      style = m_style_cartoon(color = "#02bdfc")
+    ) %>%
+    m_set_style(
+      sel = m_sel(chain = "C"),
+      style = m_style_cartoon(color = "#02fc8b")
+    ) %>% 
+    m_zoom_to()
+}
+
+saveRDS(pdb_list, glue("{analysis_dir}/af_ranked-0-PDBs.rds"))
+saveRDS(af_models, glue("{analysis_dir}/af_r3dmol_models.rds"))
+```
+
+
+```{r}
+af_pdb_paths <- list.files(
+  "/central/scratch/jbok/alphafold-multimer/2023-03-26_neo-IL2",
+  full.names = TRUE, recursive = TRUE, pattern = "ranked_0.pdb"
+)
+names(af_pdb_paths) <- gsub("IL2RBG_", "", basename(dirname(af_pdb_paths)))
+
+```
+
+```{r}
+af_models <- readRDS(glue("{analysis_dir}/af_r3dmol_models.rds"))
+pdb_list <- readRDS(glue("{analysis_dir}/af_ranked-0-PDBs.rds"))
+```
+
+Aligning PDB files and building MSA
+
+```{r, eval=FALSE}
+pdbs <- pdbaln(
+  files = pdb_list,
+  outfile = glue("{analysis_dir}/aln.fa")
+)
+# MSA
+msa_seq_labels <- names(pdb_list) %>% gsub("IL2RBG_", "", .)
+names(msa_seq_labels) <- paste0("seq", 1:length(msa_seq_labels))
+
+```
+
+Visualizing MSA
+```{r, eval=FALSE}
+p_msa <-
+  ggmsa(
+  glue("{analysis_dir}/aln.fa"),
+  start = 408, end = 500,
+  char_width = 0.5, seq_name = TRUE) +
+  scale_y_discrete(labels = msa_seq_labels) +
+  geom_seqlogo() +
+  geom_msaBar()
+
+ggsave(
+  glue("{analysis_dir}/figures/msa.png"),
+  plot = p_msa, width = 20, height = 10, dpi = 600
+  )
+```
+
+![Neo IL2 MSA](/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/structural_analysis/figures/msa.png){#fig-msa}
+
+Visualizing pairwise structural and sequence level similarity across complexes
+```{r, eval=FALSE}
+# Calculate sequence identity
+pdbs$id <- names(af_pdb_paths)
+pairwise_seqid <- seqidentity(pdbs)
+feature_order <-
+  dist(x = pairwise_seqid, method = "euclidean") %>%
+  seriate(method = "OLO") %>%
+  get_order()
+ranked_features_seqid <- rownames(pairwise_seqid)[feature_order]
+
+pairwise_seqid_df <- pairwise_seqid %>%
+  as.data.frame() %>%
+  rownames_to_column("pdb1") %>%
+  pivot_longer(!pdb1, names_to = "pdb2", values_to = "seqid") %>%
+  mutate(
+    pdb1 = factor(pdb1, ordered = TRUE, levels = ranked_features_seqid),
+    pdb2 = factor(pdb2, ordered = TRUE, levels = ranked_features_seqid)
+  )
+
+# organize by sequence ID
+p_pairwise_seq <- pairwise_seqid_df %>%
+  ggplot(aes(x = pdb1, y = pdb2, fill = seqid)) +
+  geom_tile() +
+  theme_light() +
+  labs(fill = "Sequence Identity (%)", x = NULL, y = NULL) +
+  scale_fill_viridis_c(option = "F") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    legend.key.width = unit(1, 'cm')
+  )
+
+## Calculate RMSD
+pairwise_rmsd <- rmsd(pdbs, fit=TRUE)
+feature_order_rmsd <-
+  dist(x = pairwise_rmsd, method = "euclidean") %>%
+  seriate(method = "OLO") %>%
+  get_order()
+ranked_features_rmsd <- rownames(pairwise_seqid)[feature_order_rmsd]
+
+pairwise_rmsd_df <- pairwise_rmsd %>%
+  as.data.frame() %>%
+  rownames_to_column("pdb1") %>%
+  pivot_longer(!pdb1, names_to = "pdb2", values_to = "rmsd") %>%
+  mutate(
+    pdb1 = factor(pdb1, ordered = TRUE, levels = ranked_features_rmsd),
+    pdb2 = factor(pdb2, ordered = TRUE, levels = ranked_features_rmsd)
+  )
+
+# organize by sequence ID
+p_pairwise_rmsd <- pairwise_rmsd_df  %>%
+  ggplot(aes(x = pdb1, y = pdb2, fill = rmsd)) +
+  geom_tile() +
+  theme_light() +
+  labs(fill = "RMSD", x = NULL, y = NULL) +
+  scale_fill_viridis_c(option = "F") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    legend.key.width = unit(1, 'cm')
+  )
+
+patch <- p_pairwise_seq + p_pairwise_rmsd + plot_annotation(tag_levels = "A")
+patch
+ggsave(
+  glue("{analysis_dir}/figures/pairwise_SeqID_RMSD.png"),
+  patch, width = 12, height = 6, dpi = 600
+)
+```
+
+![Pairwise Complex Similarity using Percent Sequence Similarity A) and RMSD B)](/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/structural_analysis/figures/pairwise_SeqID_RMSD.png){#fig-pairwise-metrics}
+
+
+::: {.panel-tabset}
+### neo2-15α
+
+```{r}
+af_models$`IL2RBG_neo2-15alpha`
+```
+
+### neoMPNN2
+```{r}
+af_models$IL2RBG_neoMPNN2
+```
+
+### neoMPNN3
+```{r}
+af_models$IL2RBG_neoMPNN3
+```
+
+### neoMPNN4
+```{r}
+af_models$IL2RBG_neoMPNN4
+```
+
+### neoMPNN6
+```{r}
+af_models$IL2RBG_neoMPNN6
+```
+
+### neoMPNN7
+```{r}
+af_models$IL2RBG_neoMPNN7
+```
+
+### neoMPNN14
+```{r}
+af_models$IL2RBG_neoMPNN14
+```
+
+### neoMPNN17
+```{r}
+af_models$IL2RBG_neoMPNN17
+```
+
+:::
+
+## 2023-06-10 Docking
+
+Split fasta file of neo2 variants into individual fasta files with IL2RB and IL2RG sequences
+
+```{r}
+# FASTA file of NEO2 variants
+neo2_vars <- bio3d::read.fasta(glue("{proj_dir}/2023-06-06_20neo2s.fasta"))
+# IL2 RECEPTORS
+Il2rb <- bio3d::read.fasta(glue("{proj_dir}/Il2rb.fasta"))
+Il2rg <- bio3d::read.fasta(glue("{proj_dir}/Il2rg.fasta"))
+
+# Output dir of complex fastas
+fasta_dir <-
+  "/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/2023-06-13_fastas"
+dir.create(fasta_dir, showWarnings = FALSE)
+
+for (f in 1:length(neo2_vars$id)) {
+  # save fasta file with receptor and unique il2 variant
+  var_name <- strex::str_before_first(neo2_vars$id[f], "_")
+  # seq <- bio3d::as.fasta(paste(neo2_vars$ali[f, ], collapse = ""))
+  seq <- bio3d::as.fasta(neo2_vars$ali[f, ])
+  output_fasta <- glue(
+    "{fasta_dir}/IL2RBG_{var_name}.fasta"
+  )
+  bio3d::write.fasta(Il2rb,
+    file = output_fasta,
+    ids = "Il2rb"
+  )
+  bio3d::write.fasta(Il2rg,
+    file = output_fasta,
+    ids = "Il2rg",
+    append = TRUE
+  )
+  bio3d::write.fasta(
+    alignment = seq,
+    file = output_fasta,
+    ids = var_name,
+    append = TRUE
+  )
+}
+```
+
+
+Executing multimer
+```{r, eval=FALSE}
+cluster_reports <- glue(
+  "{wkdir}/.cluster_runs/",
+  "{Sys.Date()}_AFMultimer_NEO-IL2-DOCKING_{rand_string()}"
+)
+message("\n\n CREATING:  ", cluster_reports, "\n")
+shell_do(glue("mkdir -p {cluster_reports}"))
+
+complex_fastas <-
+  list.files(fasta_dir, full.names = TRUE)
+
+for (complex_path in complex_fastas) {
+  jname <- fs::path_ext_remove(basename(complex_path))
+  slurm_run_alphafold(
+    jobname = jname,
+    slurm_out = cluster_reports,
+    input_fasta = complex_path,
+    walltime = "06:00:00",
+    mem = "32G",
+    gpus = 1,
+    cpus_per_task = 8,
+    output_dir = glue("/central/scratch/jbok/alphafold-multimer/2023-06-13_neo-IL2/{jname}")
+  )
+}
+
+```
+
+Reading in multimer model pkl results
+```{r, eval=FALSE}
+use_condaenv("/home/jboktor/miniconda3/envs/pdmbsR/bin/python", required = TRUE)
+source_python(glue("{src_dir}/python-scripts/pickle_reader.py"))
+
+```
+
+Extracting metrics of interest
+```{r, eval=FALSE}
+# list all model pkl files ----
+output_dir <-
+  glue(
+    "/central/scratch/jbok/alphafold-multimer/2023-06-13_neo-IL2"
+  )
+model_pkl_paths <-
+  list.files(
+    output_dir, pattern = ".pkl", 
+    full.names = TRUE, recursive = TRUE
+  ) %>%
+  keep(!grepl("features", .))
+
+extract_pkl_results <- function(pkl_path) {
+  pkl <- read_pickle_file(pkl_path)
+  data_out <- list(
+    pkl_path = pkl_path,
+    ptm = pkl$ptm,
+    iptm = pkl$iptm,
+    max_predicted_aligned_error = pkl$max_predicted_aligned_error,
+    ranking_confidence = pkl$ranking_confidence
+  )
+  return(data_out)
+}
+
+performance_results <- 
+  purrr::map_dfr(model_pkl_paths, ~ extract_pkl_results(.))
+saveRDS(
+  performance_results,
+  glue("{proj_dir}/{Sys.Date()}_multimer_performance_results.rds")
+)
+```
+
+Visualizing model iPTM scores
+```{r, eval=FALSE}
+performance_results <- readRDS(
+  glue("{proj_dir}/2023-06-14_multimer_performance_results.rds")
+)
+peformance_df <-
+  performance_results %>%
+  mutate(
+    complex = basename(dirname(pkl_path)),
+    model_name = basename(pkl_path),
+    ranking_score = ptm + iptm
+  )
+  
+p_iptms <- peformance_df %>%
+  ggplot(aes(x = fct_reorder(complex, iptm), y = iptm)) +
+  ggdist::stat_interval(
+    .width = c(.25, 0.5, .75, 1),
+    show.legend = T,
+    height = 0.0001
+  ) +
+  gghalves::geom_half_point(
+    side = "l", range_scale = .3, alpha = 0.8,
+    shape = 21, color = "black", size = 1.5
+  ) +
+  scale_color_brewer(palette = "PuBuGn") +
+  theme_light() +
+  coord_flip() +
+  labs(y = "iPTM", x = NULL, color = "interval") +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "top"
+  )
+
+ggsave(
+  glue("{proj_dir}/structural_analysis/figures/{Sys.Date()}_iptm.png"),
+  p_iptms, width = 5, height = 7, dpi = 600
+  )
+```
+
+![iPTM distributions](/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/structural_analysis/figures/2023-06-14_iptm.png){#fig-iptms2 height=6.5in}
+
+
+### Comparative Structural Analysis
+
+```{r, eval=FALSE}
+align_pdb_structures <- function(pdb_path_list) {
+  color_pal <- viridis::viridis_pal(option = "H")(length(pdb_path_list)) %>% 
+    strex::str_before_last(., "FF")
+  # use first pdb in path as the base model
+  base_pdb <- bio3d::read.pdb(pdb_path_list[1])
+  base_model <- r3dmol() %>%
+    m_add_model(data = m_bio3d(base_pdb)) %>%
+    m_set_style(sel = m_sel(model = 0),
+                style = m_style_cartoon(color = color_pal[1]))
+
+  for (f in 2:length(pdb_path_list)) {
+    message("\nProcessing file: ", f, " of ", 
+      length(pdb_path_list), " : ", pdb_path_list[f])
+    newpdb <- bio3d::read.pdb(pdb_path_list[f])
+    pdbs_aln <- bio3d::struct.aln(base_pdb,
+                                  newpdb,
+                                  exefile = "msa",
+                                  max.cycles = 100)
+    newpdb$xyz <- pdbs_aln$xyz
+    model_n <- f-1
+    base_model %<>%
+      m_add_model(data = m_bio3d(newpdb)) %>%
+      m_set_style(sel = m_sel(model = model_n),
+                  style = m_style_cartoon(color = color_pal[f])) %>%
+      m_zoom_to()
+  }
+  return(base_model)
+}
+
+```
+
+Generating 3D visuals
+```{r,eval=FALSE}
+#| output: false
+af_pdb_paths <- list.files(
+  "/central/scratch/jbok/alphafold-multimer/2023-06-13_neo-IL2",
+  full.names = TRUE, recursive = TRUE, pattern = "ranked_0.pdb"
+)
+aligned_pdbs <- align_pdb_structures(pdb_path_list = af_pdb_paths)
+saveRDS(aligned_pdbs, glue("{analysis_dir}/{Sys.Date()}_aligned-PDBs.rds"))
+
+pdb_list <- af_pdb_paths %>% 
+  purrr::set_names() %>% 
+  purrr::map( ~ bio3d::read.pdb(.))
+saveRDS(pdb_list, glue("{analysis_dir}/{Sys.Date()}_af_ranked-0-PDBs.rds"))
+
+```
+
+
+
+```{r}
+aligned_pdbs <- readRDS(glue("{analysis_dir}/2023-06-14_aligned-PDBs.rds"))
+aligned_pdbs %>%
+   m_rotate(angle = 90, axis = "y") %>%
+    m_spin()
+```
+
+
+```{r}
+sessionInfo()
+```

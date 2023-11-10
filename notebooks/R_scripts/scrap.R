@@ -4269,3 +4269,427 @@ future.apply::future_lapply(
 )
 
 # FUN = function(iris) sum(iris$Sepal.Length)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+analyses_ps %>%
+  meta() %>% glimpse
+  View()
+
+
+analyses_ps %>%
+  meta() %>%
+  pull(analysis_experiment.type) %>%
+  table
+
+analyses_ps %>%
+  meta() %>%
+  pull(sample_geographic.location..country.and.or.sea.region.) %>%
+  table
+analyses_ps %>%
+  meta() %>%
+  pull(study_attributes.centre.name) %>%
+  table
+
+
+analyses_ps %>%
+  meta() %>%
+  pull(sample_geographic.location..longitude.) %>%
+  table
+
+
+# alpha diversity analysis
+metadf <- meta(analyses_ps)
+observed_spec <- microbiome::alpha(analyses_ps, index = "observed")
+observed_spec_df <- bind_cols(metadf, observed_spec)
+observed_spec_df %>% glimpse
+
+observed_spec_df %>%
+  ggplot(aes(x=fct_reorder(study_attributes.accession, observed), y=observed)) +
+  geom_point(aes(color = analysis_experiment.type))+
+  theme_bw()
+
+
+
+library(maps)
+library(mapproj)
+
+world_tbl <- map_data("world") %>% 
+  as_tibble() %>%
+  filter(region != "Antarctica")
+world_tbl
+
+activated_sl_meta <- analyses_ps %>%
+  meta() %>%
+  drop_na(c(sample_longitude, sample_latitude)) %>%
+  select(
+    analysis_experiment.type, sample_longitude, 
+    sample_latitude, study_attributes.accession
+  ) %>%
+  mutate_at(vars(sample_longitude, sample_latitude), as.numeric) %>%
+  group_by(sample_longitude, sample_latitude, analysis_experiment.type) %>% 
+  summarize(sample_n = n()) %>% 
+  ungroup()
+activated_sl_meta %>% glimpse
+
+# world base plot
+world_base <- world_tbl %>%
+  ggplot() +
+  geom_map(
+    aes(long, lat, map_id = region),
+    map = world_tbl,
+    color = "darkgrey", fill = "lightgrey", size = 0.3
+  ) +
+  theme_minimal() +
+    labs(x = "longitude", y = "latitude", size = "Sample N", fill = "Method") +
+    scale_size_continuous(range = c(3, 10)) +
+    scale_fill_d3() +
+    geom_point(
+      aes(
+        x = sample_longitude, y = sample_latitude,
+        size = sample_n, fill = analysis_experiment.type
+      ),
+      data = activated_sl_meta,
+      # fill = "red",
+      shape = 21, alpha = 0.5
+    ) +
+    guides(fill = guide_legend(override.aes = list(size=5))) +
+    theme(legend.position = "top")
+
+# generate orthologonal coordinate system for map projection
+final_map <- world_base +
+  coord_map("harrison", dist = 1, angle = 30, ylim = c(-75, 85))
+final_map
+
+ggsave(
+  glue("{wkdir}/{Sys.Date()}_mgnify_activated_sludge_sample_map.png"),
+  final_map,
+  width = 9, height = 6,
+  dpi = 600
+)
+
+
+library(RColorBrewer)
+library(reshape)
+
+prevalences <- seq(.05, 1, .05)
+detections <- round(10^seq(log10(0.01), log10(.2), length = 9), 3)
+# Also define gray color palette
+gray <- gray(seq(0,1,length=5))
+
+pseq.rel <- analyses_ps %>% 
+  subset_samples(analysis_experiment.type == "assembly") %>%
+  core(detection = 1, prevalence = 1/95) %>% 
+  transform("compositional")
+
+p_ <- pseq.rel %>%
+  plot_core(
+    plot.type = "heatmap",
+    colours = viridis::viridis_pal(option = "")(8),
+    prevalences = prevalences,
+    detections = detections,
+    min.prevalence = prevalence(pseq.rel, sort = TRUE)[100]
+  ) +
+  labs(x = "Detection Threshold\n(Relative Abundance (%))") +
+  #Adjusts axis text size and legend bar height
+  theme(
+    axis.text.y = element_text(size = 8, face = "italic"),
+    axis.text.x.bottom = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 10)
+  )
+
+
+
+which(taxa_names(analyses_ps) %nin% names(ncbi_lineage_list))
+
+ncbi_lineage_list[taxa_names(analyses_ps)]
+
+
+
+ncbi_lineage_list <- ncbi_lineages$name
+names(ncbi_lineage_list) <- ncbi_lineages$taxid
+
+
+
+
+# USeful resources for plotting maps
+# http://freerangestats.info/blog/2017/06/04/military-gdp
+# https://datavizm20.classes.andrewheiss.com/example/12-example/
+
+
+
+
+# ncbi_lineages <- read.delim(
+#   glue(
+#     "/central/groups/MazmanianLab/joeB/Downloads/",
+#     "2023-08-02_ncbi-taxdump/fullnamelineage.dmp"
+#   ),
+#   quote = "",
+#   header = FALSE
+# ) %>%
+#   select(-c(V2, V4, V6)) %>%
+#     dplyr::rename(taxid = V1, name = V3, lineage = V5) %>%
+#     mutate(lineage = case_when(
+#       grepl("Viruses", lineage) ~ paste0("Viruses; ", lineage),
+#       TRUE ~ lineage
+#     )) %>%
+#   select(taxid, name) %>%
+#   drop_na() %>%
+#   distinct()
+
+
+
+
+
+
+tax_table(analyses_ps) %>%
+  as.data.frame() %>%
+  View
+
+
+# __ DMMS on Assembled genomes
+# get a list of samples with fewer than 1000 counts total
+sample_sums <- microbiome::abundances(analyses_ps) %>%
+  as.data.frame() %>%
+  colSums()
+low_read_samples <- names(sample_sums[sample_sums < 10])
+
+pseq <- analyses_ps %>% 
+  subset_samples(analysis_experiment.type == "assembly") %>%
+  subset_samples(analysis_accession %nin% low_read_samples) %>%
+  core(detection = 0, prevalence = 0.1)
+pseq
+
+# get a list of samples with fewer than 1000 counts total
+sample_sums_rnd2 <- microbiome::abundances(pseq) %>%
+  as.data.frame() %>%
+  colSums()
+low_read_samples_rnd2 <- names(sample_sums_rnd2[sample_sums_rnd2 == 0])
+pseq %<>% subset_samples(analysis_accession %nin% low_read_samples_rnd2)
+
+
+# Pick the OTU count matrix
+# and convert it into samples x taxa format
+dat <- analyses_ps %>%
+  subset_samples(analysis_accession %in% sample_names(pseq)) %>%
+  prune_taxa(taxa(pseq), .) %>%
+  abundances()
+count <- as.matrix(t(dat))
+min(rowSums(count))
+
+
+fit <-  lapply(1:4, dmn, count = count, verbose=TRUE)
+fit
+
+lplc <- sapply(fit, laplace)
+aic <- sapply(fit, AIC)
+bic <- sapply(fit, BIC)
+
+# Selecting optimal model
+best <- fit[[which.min(unlist(lplc))]]
+
+mixturewt(best)
+clust_assignments <- apply(mixture(best), 1, which.max)
+
+
+
+# Aitchison distance PCA
+
+# Pick core taxa with with the given prevalence and detection limits
+ps_pca <- pseq %>%
+  microbiome::transform("clr")
+
+idist <- phyloseq::distance(ps_pca, method = "euclidean")
+dist_label <- "Aitchison"
+imds <- phyloseq::ordinate(ps_pca, "MDS", distance = idist)
+
+p <- plot_ordination(ps_pca, imds,  axes = c(1, 2, 3))
+pcoa_data <- pca_df <- bind_cols(p$data, clust_assignments) %>%
+  dplyr::rename(DMM_cluster = ...80) %>%
+  mutate(DMM_cluster = factor(DMM_cluster)) 
+pca_df %>% glimpse
+
+pco1 <- round((imds$values$Relative_eig[1]) * 100, digits = 2)
+pco2 <- round((imds$values$Relative_eig[2]) * 100, digits = 2)
+pco3 <- round((imds$values$Relative_eig[3]) * 100, digits = 2)
+
+fig_plotly <-
+  pcoa_data %>%
+  plot_ly(
+    x = ~Axis.1,
+    y = ~Axis.2,
+    z = ~Axis.3 #,
+    # text = ~ paste("Line:", line, "<br>Organism:", organism)
+  ) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = glue("PCo1 ({pco1}%)")),
+      yaxis = list(title = glue("PCo2 ({pco2}%)")),
+      zaxis = list(title = glue("PCo3 ({pco3}%)"))
+    )
+  )
+
+plotly_pcoa_richness <-
+  add_markers(
+    fig_plotly,
+    color = ~DMM_cluster
+  )
+
+
+
+
+library(RColorBrewer)
+
+# # get a list of samples with fewer than 1000 counts total 
+# sample_sums <- microbiome::abundances(analyses_ps) %>% as.data.frame() %>% colSums()
+# low_read_samples <- names(sample_sums[sample_sums < 1000])
+# pseq <- analyses_ps %>% 
+#   subset_samples(analysis_experiment.type == "amplicon") %>% 
+#   subset_samples(analysis_accession %nin% low_read_samples) %>% 
+#   microbiome::transform("compositional") %>%
+#   core(detection = 1e-5, prevalence = 0.1)
+# # get a list of samples with fewer than 1000 counts total 
+# sample_sums_rnd2 <- microbiome::abundances(pseq) %>% as.data.frame() %>% colSums()
+# low_read_samples_rnd2 <- names(sample_sums_rnd2[sample_sums_rnd2 == 0])
+# ps_trim <- pseq %>% subset_samples(analysis_accession %nin% low_read_samples_rnd2)
+
+prevalences <- seq(.05, 1, .05)
+detections <- round(10^seq(log10(0.001), log10(.2), length = 9), 3)
+
+pseq.rel <- ps_pca %>% 
+  microbiome::transform("compositional")
+
+p_core_taxa <-
+  pseq.rel %>%
+  plot_core(
+    plot.type = "heatmap",
+    colours = viridis::viridis_pal(option = "H")(8),
+    prevalences = prevalences,
+    detections = detections,
+    min.prevalence =min(prevalence(pseq.rel, sort = TRUE))
+  ) +
+  labs(x = "Detection Threshold\n(Relative Abundance (%))", y= "Taxa") +
+  #Adjusts axis text size and legend bar height
+  theme(
+    axis.text.y = element_blank(), # element_text(size = 8, face = "italic"),
+    axis.text.x.bottom = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 10),
+    legend.key.height = unit(1, 'cm'),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  glue("{Sys.Date()}_activated_sludge_amplicon_seq_core_taxa.png"),
+  p_core_taxa,
+  width = 4, height = 4
+)
+
+
+
+
+# for (k in seq(ncol(fitted(best)))) {
+#   d <- melt(fitted(best))
+#   colnames(d) <- c("OTU", "cluster", "value")
+#   d <- subset(d, cluster == k) %>%
+#      # Arrange OTUs by assignment strength
+#      arrange(value) %>%
+#      mutate(OTU = factor(OTU, levels = unique(OTU))) %>%
+#      # Only show the most important drivers
+#      filter(abs(value) > quantile(abs(value), 0.8))     
+
+#   p <- ggplot(d, aes(x = OTU, y = value)) +
+#        geom_bar(stat = "identity") +
+#        coord_flip() +
+#        labs(title = paste("Top drivers: community type", k))
+#   print(p)
+# }
+
+
+# analyses_ps %>%
+#   taxa() %>%
+#   keep(grepl("83333", .))
+
+
+
+
+
+
+
+# Core analyses ---------------
+
+library(RColorBrewer)
+library(reshape)
+`%nin%` <- Negate(`%in%`)
+
+# get a list of samples with fewer than 1000 counts total 
+sample_sums <- microbiome::abundances(analyses_ps) %>% as.data.frame() %>% colSums()
+low_read_samples <- names(sample_sums[sample_sums < 1000])
+pseq <- analyses_ps %>% 
+  subset_samples(analysis_experiment.type == "amplicon") %>% 
+  subset_samples(analysis_accession %nin% low_read_samples) %>% 
+  microbiome::transform("compositional") %>%
+  core(detection = 1e-5, prevalence = 0.1)
+# get a list of samples with fewer than 1000 counts total 
+sample_sums_rnd2 <- microbiome::abundances(pseq) %>% as.data.frame() %>% colSums()
+low_read_samples_rnd2 <- names(sample_sums_rnd2[sample_sums_rnd2 == 0])
+ps_trim <- pseq %>% subset_samples(analysis_accession %nin% low_read_samples_rnd2)
+
+
+prevalences <- seq(.05, 1, .05)
+detections <- round(10^seq(log10(0.001), log10(.2), length = 9), 3)
+
+pseq.rel <- ps_trim %>% 
+  microbiome::transform("compositional")
+
+p_core_taxa <-
+  pseq.rel %>%
+  plot_core(
+    plot.type = "heatmap",
+    colours = viridis::viridis_pal(option = "H")(8),
+    prevalences = prevalences,
+    detections = detections,
+    min.prevalence =min(prevalence(pseq.rel, sort = TRUE))
+  ) +
+  labs(x = "Detection Threshold\n(Relative Abundance (%))", y= "Taxa") +
+  #Adjusts axis text size and legend bar height
+  theme(
+    axis.text.y = element_blank(), # element_text(size = 8, face = "italic"),
+    axis.text.x.bottom = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 10),
+    legend.key.height = unit(1, 'cm'),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  glue("{Sys.Date()}_activated_sludge_amplicon_seq_core_taxa.png"),
+  p_core_taxa,
+  width = 4, height = 4
+)
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,572 @@
+---
+title: "Sequence Similarity Screen"
+editor: visual
+author: "Joe Boktor"
+date: '2023-01-24'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+bibliography: references.bib
+---
+
+### Profile Hidden Markov Models
+Formatting a data table with input parameters for cluster execution.
+```{r, eval=FALSE}
+fastas_processed_keyname_hits <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-04-18_fasta-paths_processed_keyname_hits.rds"
+))
+
+# Run 1: .cluster_runs/2023-04-04_JACKHMMER-6SYp820f3A
+# Run 2: .cluster_runs/2023-04-09_JACKHMMER-7z9rE3v4g5/
+
+pre_batch_input <- list(fastas_processed_keyname_hits) %>%
+  bind_rows(.id = "id") %>%
+  tidyr::pivot_longer(
+    !id, 
+    names_to = "ensembl_id", 
+    values_to = "fasta_path"
+    ) %>%
+  dplyr::select(fasta_path) %>%
+  mutate(working_dir = wkdir) %>%
+  mutate(
+    id = basename(fasta_path),
+    output_dir = glue(
+      "{wkdir}/data/interim/jackhmmer_results/immport/{id}"
+      # "/central/scratch/jbok/mim_temp/jackhmmer_results/immport/{id}"
+      ),
+    msa_output = glue("{output_dir}/{id}_msa.fasta"),
+    msa_exists = map_lgl(msa_output, ~ as.logical(file.size(.) > 0))
+  )
+
+# # failed runs
+# pre_batch_input %>% filter(!msa_exists | is.na(msa_exists)) %>% View()
+
+# filter completed runs
+batch_input_df <-
+  pre_batch_input %>%
+  filter(!msa_exists | is.na(msa_exists)) %>%
+  dplyr::select(-c(id, output_dir, msa_output, msa_exists))
+batch_input_df %>% glimpse()
+# View(batch_input_df)
+```
+
+Jackhmmer slurm function.
+```{r, eval=FALSE}
+# Create HMM MSA profiles for each protein using jackhmmer against UniProt
+run_jackhmmer <- function(fasta_path, working_dir) {
+  require(glue)
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  id <- basename(fasta_path)
+  output_dir <-
+    glue("/central/scratch/jbok/mim_temp/jackhmmer_results/immport/{id}")
+  if (
+    !file.exists(glue("{output_dir}/{id}_msa.fasta")) |
+      file.size(glue("{output_dir}/{id}_msa.fasta")) == 0
+    ) {
+    shell_do(glue("mkdir -p {output_dir}"))
+    message("Running Jackhmmer on: ", id)
+    jack_cmd <-
+      glue(
+        "jackhmmer ",
+        " --cpu 2",
+        " -N 5",
+        " -E 0.0000000001", # 1e-10
+        " -A {output_dir}/{id}_msa.fasta",
+        " -o {output_dir}/{id}_jackhmmer.out",
+        " --tblout {output_dir}/{id}_seqhits.txt",
+        " --domtblout {output_dir}/{id}_domainhits.txt",
+        " --noali",
+        " {fasta_path}/processed_entries.fasta",
+        " /central/software/alphafold/data/uniprot/uniprot.fasta"
+      )
+    message("Executing command: ", jack_cmd, "\n")
+    shell_do(jack_cmd)
+  } else {
+    message("Jackhmmer already run on: ", id)
+  }
+}
+
+```
+
+Executing Jackhmmer slurm jobs.
+```{r, eval=FALSE}
+# configure registry ----
+cluster_run <- glue("{Sys.Date()}_JACKHMMER-{rand_string()}/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.05,
+  fs.latency = 65
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = run_jackhmmer,
+  args = batch_input_df,
+  reg = breg
+)
+setJobNames(jobs,
+  paste("JACKHMMER", basename(batch_input_df$fasta_path), sep = "_"),
+  reg = breg
+)
+getJobNames(jobs, reg = breg)
+submitJobs(jobs,
+  resources = list(
+    walltime = 288000,
+    memory = 128000,
+    ncpus = 1,
+    max.concurrent.jobs = 9999
+  )
+)
+
+```
+
+Jackhmmer MSA QC
+# TODO: CHECK SLURM LOGS FOR SUCCESSFUL RUNS,
+
+```{r, eval=FALSE}
+workflow_meta <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-03-14_workflow-meta-1_FastaQC.rds"
+))
+
+msa_paths <-
+  list.files(
+    glue(
+      "/central/scratch/jbok/mim_temp/jackhmmer_results/immport"
+    ),
+    full.names = TRUE, recursive = TRUE, pattern = ".fasta"
+  )
+
+names(msa_paths) <-
+  msa_paths %>%
+  basename() %>%
+  gsub("_msa.fasta", "", .)
+
+msa_paths_df <- list_items_to_df(
+  list(msa_paths), "ensembl_id", "jackhmmer_msa_path"
+)
+
+workflow_meta_jack <- workflow_meta %>%
+  left_join(msa_paths_df, by = "ensembl_id") %>%
+  mutate(
+    jackhmmer_msa_exists = map_lgl(
+      jackhmmer_msa_path, ~ as.logical(file.size(.) > 0)
+    )
+  )
+workflow_meta_jack %>%
+  qc_check_files(col = "jackhmmer_msa_path")
+
+gene_df <- read.delim(
+  glue("{wkdir}/data/input/Immport_gene_lists/ImmportGeneList.txt"),
+  stringsAsFactors = FALSE, header = TRUE
+)
+immport_gene_categories <-
+  gene_df %>%
+  dplyr::select(Symbol, Category) %>%
+  mutate(Category = glue("Category_{Category}")) %>% 
+  mutate(n = 1) %>%
+  distinct() %>%
+  pivot_wider(
+    names_from = "Category", values_from = n, values_fill = 0
+  ) %>%
+  dplyr::rename(gene_name = Symbol)
+
+workflow_meta_jack %<>%
+  left_join(immport_gene_categories, by = "gene_name") %>%
+  glimpse()
+
+saveRDS(
+  workflow_meta_jack,
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "{Sys.Date()}_workflow-meta-2_JackhmmerQC.rds"
+  )
+)
+
+```
+
+
+Formatting a data table with input parameters for hmmsearch cluster execution.
+
+```{r, eval=FALSE}
+fastas_processed_keyname_hits <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-03-16_fasta-paths_processed_keyname_hits.rds"
+))
+workflow_meta <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-04-07_workflow-meta-2_JackhmmerQC.rds"
+  )
+)
+tmp_dir <- "/central/scratch/jbok/mim_temp"
+batch_input_df <- workflow_meta %>%
+  filter(jackhmmer_msa_exists) %>%
+  dplyr::rename(id = ensembl_id) %>%
+  mutate(
+    input_dir = glue("{tmp_dir}/jackhmmer_results/immport/{id}"),
+    output_dir = glue("{tmp_dir}/hmmersearch_results/immport/{id}"),
+    expected_output = glue("{tmp_dir}/hmmersearch_results/immport/{id}/{id}_tblout.txt"),
+    working_dir = wkdir
+  ) %>%
+  mutate(output_dir_exists = map_lgl(output_dir, ~ file.exists(.))) %>%
+  mutate(output_file_exists = map_lgl(expected_output, ~ file.exists(.))) %>%
+  filter(!output_file_exists) %>%
+  select(id, input_dir, output_dir, working_dir)
+batch_input_df %>% glimpse
+
+```
+
+Hmmsearch slurm function.
+
+```{r, eval=FALSE}
+run_hmmsearch <- function(id, input_dir, output_dir, working_dir) {
+  require(glue)
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  shell_do(glue("mkdir -p {output_dir}"))
+  protein_catalog_path <- glue(
+    "/central/groups/MazmanianLab/joeB",
+    "/Downloads/protein_catalogs/clustered_catalogs",
+    "/merged/2023-02-13_catalog_MMSeq2-95_rep_seq.fasta"
+  )
+  # make hmm profile from MSA
+  fasta_path <- glue("{input_dir}/{id}_msa.fasta")
+  shell_do(glue("hmmbuild {output_dir}/{id}.hmm {fasta_path}"))
+  # hmmsearch on protein catalog using hmm profile
+  shell_do(
+    glue(
+      "hmmsearch ",
+      " --cpu 4",
+      " -A {output_dir}/{id}_msa.hmm",
+      " -o {output_dir}/{id}_hmmsearch.out",
+      " --tblout {output_dir}/{id}_tblout.txt",
+      " --domtblout {output_dir}/{id}_domtblout.txt",
+      " --noali",
+      " {output_dir}/{id}.hmm",
+      " {protein_catalog_path}"
+    )
+  )
+}
+
+```
+
+Executing hmmsearch slurm jobs.
+```{r, eval=FALSE}
+# configure registry ----
+cluster_run <- glue("{Sys.Date()}_HMMSEARCH-{rand_string()}/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.1,
+  fs.latency = 65
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = run_hmmsearch,
+  args = batch_input_df,
+  reg = breg
+)
+setJobNames(jobs,
+  paste("HMMSEARCH", batch_input_df$id, sep = "_"),
+  reg = breg
+)
+getJobNames(jobs, reg = breg)
+submitJobs(jobs,
+  resources = list(
+    walltime = 259200,
+    memory = 8000,
+    ncpus = 8,
+    max.concurrent.jobs = 9999
+  )
+)
+
+```
+
+
+Processing and aggregating hmmsearch results
+```{r, eval=FALSE}
+hmmer_results_paths <- list.files(
+  "/central/scratch/jbok/mim_temp/hmmersearch_results/immport",
+  recursive = TRUE, full.names = TRUE, pattern = "_tblout.txt"
+  ) %>%
+  keep(file.size(.) > 0)
+
+# load in hmmersearch results
+hmmer_results <- map_df(hmmer_results_paths, read_tblout)
+hmmer_results_df <- hmmer_results %>%
+  select(-c(domain_accession, query_accession)) %>%
+  mutate(catalog = map_chr(
+    strex::str_before_nth(domain_name, "_", 2),
+    ~ str_remove(., "CATID_")
+  ))
+
+saveRDS(
+  hmmer_results_df,
+  glue(
+    "{wkdir}/data/processed/hmmersearch_results/",
+    "{Sys.Date()}_hmmersearch_results.rds"
+  )
+)
+
+workflow_meta %<>%
+  mutate(
+    hmmersearch_output_expected = glue(
+      "/central/scratch/jbok/mim_temp/",
+      "hmmersearch_results/immport/{ensembl_id}/{ensembl_id}_tblout.txt"
+    )) %>%
+    mutate(hmmersearch_output_created = 
+      map_lgl(hmmersearch_output_expected, ~ file.exists(.))) %>%
+    mutate(hmmersearch_output_exists = 
+      map_lgl(hmmersearch_output_expected, ~ as.logical(file.size(.) > 0)))
+
+saveRDS(
+  workflow_meta,
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "{Sys.Date()}_workflow-meta-3_HmmersearchQC.rds"
+  )
+) 
+```
+
+Visualizing HMMER Results - loading in data
+```{r, eval=FALSE}
+hmmer_results_df <- readRDS(
+  glue(
+    "{wkdir}/data/processed/hmmersearch_results/",
+    "2023-03-22_hmmersearch_results.rds"
+  )
+)
+workflow_meta <- readRDS(
+  glue(
+    "{wkdir}/data/interim/tmp/",
+    "2023-03-22_workflow-meta-3_HmmersearchQC.rds"
+  )
+)
+workflow_meta_subset <- workflow_meta %>%
+  dplyr::select(
+    ensembl_id, gene_name, ext_ref_description,
+    contains("Category")
+  )
+analysis_df_all <- hmmer_results_df %>% 
+  mutate(ensembl_id = strex::str_before_first(query_name, "-i")) %>%
+  left_join(workflow_meta_subset, by = "ensembl_id")
+analysis_df <- analysis_df_all %>%
+  filter(
+    catalog != "VEuPathDB",
+    sequence_evalue <= 1e-10
+  )
+saveRDS(
+  as.data.table(analysis_df_all), 
+    glue("{wkdir}/data/interim/hmmersearch_results/{Sys.Date()}_results.rds")
+  )
+# generating significance imputation value (1/2 min)
+ranked_evals <- analysis_df$sequence_evalue %>%
+  unique() %>%
+  sort()
+impt <- ranked_evals[2] / 2
+
+```
+
+```{r, eval=FALSE}
+# How many EIDs were tested? How many return at least one hit?
+tested_eids <- analysis_df_all$ensembl_id %>% unique()
+eids_with_hit <- analysis_df$ensembl_id %>% unique()
+length(tested_eids)
+length(eids_with_hit)
+
+```
+
+```{r, eval=FALSE}
+# How many hits are there per gene, and per category? ----
+category_hits <- tibble()
+for (cat in workflow_meta %>% select(contains("Category")) %>% names) {
+  category_hits %<>%
+    bind_rows(
+      analysis_df %>%
+        filter(!!sym(cat) == 1) %>%
+        group_by(ensembl_id, catalog, !!sym(cat)) %>%
+        dplyr::summarize(n_hits = sum(!!sym(cat))) %>%
+        mutate(Category = cat) %>%
+        select(-!!sym(cat))
+    )
+}
+category_hits %<>%
+  ungroup() %>% 
+  mutate(
+    category_general =
+      Category %>%
+      gsub("Category_", "", .) %>%
+      gsub("_Receptor|_Receptors", "", .) %>%
+      gsub("_Member|_Members", "", .) %>%
+      gsub("Chemokines", "Chemokine", .) %>%
+      gsub("Cytokines", "Cytokine", .) %>%
+      gsub("TCRsignalingPathway", "TCR Signaling Pathway", .) %>%
+      gsub("BCRSignalingPathway", "BCR Signaling Pathway", .) %>%
+      gsub("NaturalKiller_Cell_Cytotoxicity", "NK Cytotoxicity", .) %>%
+      gsub("_", " ", .)
+  )
+
+```
+
+```{r, eval=FALSE}
+category_hits %>% glimpse()
+category_hits$category_general %>% unique()
+
+p_category_ridgedensity <- 
+  ggplot(category_hits, aes(n_hits + 1, category_general)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    jittered_points = TRUE,
+    position = position_points_jitter(width = 0.5, height = 0),
+    point_shape = "|", point_size = 2,
+    alpha = 0.7) +
+    scale_x_log10(labels = scales::comma) +
+    theme_light() +
+    labs(
+      x = expression(Microbial~Proteins<="E-value"~10^{"-10"}),
+      y = NULL, full = "# Hits") +
+    theme(
+      legend.position = "none",
+      panel.border = element_blank()
+    )
+
+p_catalog_ridgedensity <-
+ggplot(category_hits, aes(n_hits + 1, catalog)) +
+  geom_density_ridges(
+    rel_min_height = 0.01,
+    jittered_points = TRUE,
+    position = position_points_jitter(width = 0.5, height = 0),
+    point_shape = "|", point_size = 2,
+    alpha = 0.7) +
+    scale_x_log10(labels = scales::comma) +
+    theme_light() +
+    labs(
+      x = expression(Microbial~Proteins<="E-value"~10^{"-10"}),
+      y = NULL, full = "# Hits") +
+    theme(
+      legend.position = "none",
+      panel.border = element_blank()
+    )
+
+p_pathes <- (p_category_ridgedensity / p_catalog_ridgedensity) +
+  plot_annotation(tag_levels = "A")
+
+ggsave(
+  glue(
+    "{wkdir}/figures/hmmersearch/",
+    "{Sys.Date()}_hmmersearch_summary.png"
+  ),
+  p_pathes,
+  width = 7, height = 10, dpi = 600
+)
+
+```
+
+![pHMM Microbial Catalog Count distributions for each gene grouped by A) human target gene category and B) microbial sub-catalog of origin](../figures/hmmersearch/2023-03-23_hmmersearch_summary.png){#fig-hmmsummary  height=8in}
+
+Across the immport gene lists we have successfully completed pHMM analysis for 1057, of these tested genes, 729 display at least one microbial association with an E-value <= 10^-10. 
+
+Next, we select the top 30 human immport genes with the most sigificant sequence results and vizualize the distribution of significance values across sub-catalogs.
+
+
+
+
+
+Formatting a data.table with input parameters for cluster execution.
+```{r, eval=FALSE}
+# load in data 
+keyname_hits <- readRDS(
+  glue("{wkdir}/data/interim/tmp/",
+  "2023-03-09_gget_immport.rds")
+  )
+
+fastas_processed_keyname_hits <- readRDS(glue(
+  "{wkdir}/data/interim/tmp/",
+  "2023-03-14_fasta-paths_processed_keyname_hits.rds"
+  ))
+
+fasta_paths_df <- list(fastas_processed_keyname_hits) %>% 
+  bind_rows(.id = "id") %>%
+  tidyr::pivot_longer(!id, names_to = "ensembl_id", values_to = "fasta_path") %>% 
+  dplyr::select(-id) %>% 
+  mutate(fasta_path = glue("{fasta_path}/processed_entries.fasta"))
+
+saveRDS(fasta_paths_df, glue(
+  "{wkdir}/data/interim/tmp/",
+  "{Sys.Date()}_fasta-paths_processed_keyname_hits-data-frame.rds"
+  ))
+
+protein_catalog_path <- "/central/groups/MazmanianLab/joeB/Downloads/protein_catalogs"
+chunked_catalog_paths <- list.files(
+  glue("{protein_catalog_path}/clustered_catalogs/merged/chunked_fasta"),
+  full.names = TRUE) %>% 
+  keep(grepl("chunk", .))
+
+# create a datatable mapping each ensembl_id to each chunked catalog
+binned_eids <- data.frame(
+  "ensembl_id" = rep(
+    keyname_hits$ensembl_id,
+    each = length(chunked_catalog_paths)
+  ),
+  "refdb_path" = rep(
+    chunked_catalog_paths,
+    times = length(keyname_hits$ensembl_id)
+  )
+)
+
+alignment_df_list <- bind_rows(
+  keyname_hits %>%
+    dplyr::select(ensembl_id) %>%
+    mutate(method = "needle"),
+  keyname_hits %>%
+    dplyr::select(ensembl_id) %>%
+    mutate(method = "water")
+    ) %>%
+    ungroup() %>%
+    full_join(binned_eids, by = "ensembl_id") %>% 
+    full_join(fasta_paths_df, by = "ensembl_id") %>%
+    select(-c(gene_name, sequences_aa))
+
+alignment_df_list %>% glimpse()
+
+saveRDS(
+  alignment_df_list,
+  glue("{wkdir}/data/interim/tmp/emboss-alignment-execution-df.rds")
+)
+
+alignment_df_list$ensembl_id %>% unique() %>% length()
+alignment_df_list$fasta_path %>% unique() %>% length()
+alignment_df_list$method %>% unique() %>% length()
+alignment_df_list$refdb_path %>% unique() %>% length()
+```
+
+
+
+
+```{r, eval=FALSE}
+
+```
+

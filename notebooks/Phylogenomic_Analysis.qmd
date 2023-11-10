@@ -1,0 +1,1035 @@
+---
+title: "Phylogenomic Analysis of Human Immune Genes"
+editor: visual
+author: "Joe Boktor"
+date: '2023-05-19'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+bibliography: references.bib
+---
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(viridis)
+library(strex)
+library(plotly)
+library(ggsci)
+library(data.table)
+library(kableExtra)
+# Plotting packages
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+library(ggtree)
+library(seriation)
+library(aplot)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+genus_dir <- glue("{wkdir}/data/interim/refseq_genomes/genus_sampling")  
+scratch_dir <- "/central/scratch/jbok"
+refseq_proteins_dir <- glue(
+  "{scratch_dir}/refseq_proteins/",
+  "genus_sampling/download/protein_faa"
+)
+
+```
+
+
+### Background
+Hidden Markov Model sequence analysis of immune genes of interest across microbial metagenomes reveals certain genes with high sequence conservation in both eukaryotes and some prokaryotes. Some of these genes are involve in basic cellular functions, such as translation, while others are involved in more specific functions. To determine which genes we should anticipate to be conserved across the tree of life, we will use the RefSeq database to sample representative genomes from each genus. With this sequence set, we will create a custom BLAST database and query each gene of interest against it. We will then use the BLAST results to determine the degree of conservation of each gene across the tree of life.
+
+### Objectives
+- Quantify the degree of conservation of human immune genes across the tree of life
+
+### Analysis
+
+```{mermaid, include = FALSE}
+%%| fig-width: 8
+flowchart TD
+  A(All RefSeq + \nGenBank Genomes) --> |Sample representative \ngenera| B(30,000+ genomes\n Archaea, Bacteria, Fungi, \nProtozoa, Plants, \nInvertebrates, Vertebrates)
+  B --> |CDS available| E(Subsampled Tree of Life \n CDS)
+  E --> F(blastp DB)
+
+  A1(Human Immune \nGenes) --> |Signal Peptide \n removal| B1(Human Immune \nGenes trimmed)
+  B1 --> C1{blastp}
+  F --> C1
+  C1 --> D1(Conservation \nAnalysis)
+
+```
+
+Sampling RefSeq Genomes by Genus
+
+
+```{bash, eval = FALSE}
+mamba activate pdmbsR
+mkdir -p ../data/interim/refseq_genomes/genus_sampling
+python-scripts/refseq_build.py --output ../data/interim/refseq_genomes/genus_sampling \
+    --genbank \
+    --sample 1 \
+    --rank genus \
+    --cats archaea,bacteria,fungi,invertebrate,plant,protozoa,vertebrate_mammalian,vertebrate_other \
+    --above \
+    --manual \
+    --reference \
+    --represent
+
+```
+
+Aggregating metadata
+
+```{r}
+#| warning: false
+
+# read in taxonomy metadata
+tax_metadata <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/metadata.tsv"),
+  header = TRUE,
+  stringsAsFactors = FALSE
+) %>%
+    mutate(ftp_name = strex::str_after_last(ftp_path, "/"))
+lineages <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/lineages.txt"),
+  header = FALSE,
+  stringsAsFactors = FALSE,
+  col.names = c("genome", "lineage")
+) %>%
+    mutate(kingdom = strex::str_before_first(lineage, ";"))
+urls <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/urls.txt"),
+  header = FALSE,
+  stringsAsFactors = FALSE,
+  col.names = c("url")
+) %>% 
+  mutate(ftp_name = strex::str_after_last(url, "/"))
+
+merged_meta <- tax_metadata %>%
+  full_join(lineages, by = "genome") %>%
+  full_join(urls, by = "ftp_name") %>% 
+  as_tibble() %>% 
+    # correct problematic file names
+  mutate(
+    ftp_name = gsub(".fasta.gz", "", ftp_name),
+    ftp_name = gsub(".fa.gz", "", ftp_name),
+  )
+# merged_meta %>%
+#   DT::datatable(options = list(scrollX = TRUE))
+
+```
+
+
+Prepping parallel downloads
+
+```{r, eval = FALSE}
+url_list <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/urls.txt"),
+  header = FALSE, sep = "\t"
+)
+download_dir <- "/central/scratch/jbok/refseq_proteins/genus_sampling/download"
+faa_dir <- glue("{download_dir}/protein_faa")
+fna_dir <- glue("{download_dir}/genomic_fna")
+shell_do(glue("mkdir -p {faa_dir}"))
+shell_do(glue("mkdir -p {fna_dir}"))
+
+# We should have 30,957 genomes
+url_list %<>%
+  mutate(
+    file_header = strex::str_after_last(V1, "/"),
+    rsync_dl_link_faa = glue(
+      "{gsub('https', 'rsync', V1)}/",
+      "{file_header}_protein.faa.gz"
+    ),
+    rsync_dl_link_fna = glue(
+      "{gsub('https', 'rsync', V1)}/",
+      "{file_header}_genomic.fna.gz"
+    ),
+    dl_path_faa = glue(
+      "{faa_dir}/{file_header}_protein.faa.gz"
+    ),
+    dl_path_fna = glue(
+      "{fna_dir}/{file_header}_genomic.fna.gz"
+    ),
+    dl_path_faa_exists = map_lgl(dl_path_faa, file.exists),
+    dl_path_fna_exists = map_lgl(dl_path_fna, file.exists)
+  )
+
+# Once this is complete, continue bash run above. Note, it will also dramatically speed up the process if you now comment out the download_genomes() modules
+
+```
+
+Downloading faa files
+
+```{r, eval = FALSE}
+future::plan(multisession, workers = 14)
+url_list %>%
+  filter(!dl_path_faa_exists) %>%
+  pull(rsync_dl_link_faa) %>%
+  furrr::future_map(
+    ~ shell_do(
+      glue(
+        "rsync --copy-links --times --verbose",
+        " {.} ",
+        " /central/scratch/jbok/refseq_proteins/genus_sampling/download/protein_faa/"
+      )
+    )
+  )
+
+```
+
+Downloading genome fna files
+```{r, eval = FALSE}
+url_list %<>%
+  mutate(
+    dl_path_faa_exists = map_lgl(dl_path_faa, file.exists),
+    dl_path_fna_exists = map_lgl(dl_path_fna, file.exists)
+  )
+
+tic()
+future::plan(multisession, workers = 14)
+url_list %>%
+  filter(!dl_path_faa_exists) %>%
+  filter(!dl_path_fna_exists) %>% 
+  pull(rsync_dl_link_fna) %>% 
+  furrr::future_map(
+    ~ shell_do(
+      glue(
+        "rsync --copy-links --times --verbose",
+        " {.}",
+        " /central/scratch/jbok/refseq_proteins/genus_sampling/download/genomic_fna/"
+      )
+    )
+  )
+toc()
+
+```
+
+
+```{r, eval = FALSE}
+# generate list of protein files from ncbi that downloaded successfully 
+ref_prot_df <- tibble(
+  "refseq_prot_path" =
+    list.files(path = refseq_proteins_dir, full.names = TRUE)
+) %>%
+  mutate(
+    ftp_name =
+      str_after_last(refseq_prot_path, "/") %>% gsub("_protein.faa.gz", "", .)
+  )
+
+# create a data frame for batch processing
+batch_input_df <-
+  tibble(
+    "refseq_fna_path" =
+      list.files(
+        path = glue(
+          "{scratch_dir}/refseq_proteins/genus_sampling/download/genomic_fna"),
+        full.names = TRUE
+      )
+  ) %>%
+  mutate(
+    perfect_refseq_fna_path = case_when(
+      grepl("\\.gz$", refseq_fna_path) ~ refseq_fna_path,
+      TRUE ~ glue("{refseq_fna_path}.gz")
+    ),
+    ftp_name =
+      str_after_last(perfect_refseq_fna_path, "/") %>%
+        gsub("_genomic.fna.gz", "", .),
+    # generate list of desired fasta outputs
+    prodigal_path =
+      purrr::map_chr(
+        perfect_refseq_fna_path,
+        ~ glue(
+          "{scratch_dir}/prodigal_proteins/",
+          "{gsub('genomic.fna.gz', 'protein.fasta', basename(.))}"
+        )
+      ),
+    prodigal_unprocessed_lgr =
+      purrr::map_lgl(prodigal_path, ~ !file.exists(.)),
+    prodigal_filesize =
+      purrr::map_dbl(prodigal_path, ~ file.size(.)),
+    transeq_path =
+      glue(
+        "{scratch_dir}/transeq_proteins/",
+        "{ftp_name}_protein.fasta"
+      ),
+    transeq_path_exists =
+      purrr::map_lgl(transeq_path, file.exists),
+    transeq_filesize =
+      purrr::map_dbl(transeq_path, ~ file.size(.))
+  ) %>%
+    full_join(ref_prot_df) %>%
+  full_join(merged_meta)
+
+saveRDS(
+  batch_input_df,
+  glue("{genus_dir}/{Sys.Date()}_fna_and_prodigal_paths.rds")
+)
+
+# RENAME PROBLEMATIC FILE NAMES (run once and then rerun chunk)
+ref_prot_df %>%
+  filter(
+    grepl(".fasta.gz_", refseq_prot_path)
+  ) %>%
+  pull(refseq_prot_path) %>%
+    purrr::map(~ shell_do(
+      glue("mv {.} {gsub('.fasta.gz_protein', '_protein', .)}")
+      ))
+batch_input_df %>%
+  filter(
+    grepl(".fa.gz_genomic", refseq_fna_path)
+  )  %>%
+  pull(refseq_fna_path) %>%
+    purrr::map( ~shell_do(glue("mv {.} {gsub('.fa.gz_genomic', '_genomic', .)}")))
+
+batch_input_df %>%
+  filter(
+    grepl(".fasta.gz_genomic", refseq_fna_path)
+  )  %>%
+  pull(refseq_fna_path) %>%
+    purrr::map( ~shell_do(glue("mv {.} {gsub('.fasta.gz_genomic', '_genomic', .)}")))
+
+
+```
+
+
+```{r, eval = FALSE}
+# ORDER OF PRIORITY ----
+# 1) protein_aa info available from ncbi
+# 2) prodigal extraction of CDS from genome fna (only for smaller genomes)
+# 3) transeq brute force translation from genome fna (only for larger genomes)
+
+# #' create one common output path for all files
+# final_set <- batch_input_df %>%
+#   mutate(
+#     protein_path = case_when(
+#       !is.na(refseq_prot_path) ~ refseq_prot_path,
+#       !is.na(prodigal_filesize) & prodigal_filesize > 0 ~ prodigal_path
+#       # transeq_path_exists ~ transeq_path
+#     ),
+#     clean_protein_path =
+#       glue("{scratch_dir}/cleaned_fasta/{ftp_name}_cleaned-protein.fasta")
+#   ) %>%
+#   drop_na(protein_path)
+# final_set %>% glimpse
+
+refseq_protein_paths <- tibble(
+  "refseq_protein_paths" = list.files(
+    path = glue(
+      "{scratch_dir}/refseq_proteins/genus_sampling/download/protein_faa"
+    ),
+    full.names = TRUE
+  )) %>%
+    mutate(ftp_name = gsub("_protein.faa", "", basename(refseq_protein_paths)))
+
+prodigal_paths <- tibble(
+  "prodigal_paths" = list.files(
+    path = glue(
+      "{scratch_dir}/prodigal_proteins"
+    ),
+    full.names = TRUE
+  )) %>%
+  mutate(ftp_name = gsub("_protein.fasta", "", basename(prodigal_paths)))
+
+final_set <- 
+  refseq_protein_paths %>%
+  full_join(prodigal_paths) %>%
+  left_join(merged_meta, by = "ftp_name") %>%
+  mutate(
+    protein_path = case_when(
+      !is.na(refseq_protein_paths) ~ refseq_protein_paths,
+      TRUE ~ prodigal_paths
+    ),
+    clean_protein_path =
+      glue("{scratch_dir}/cleaned_fasta/{ftp_name}_cleaned-protein.fasta")
+  ) %>%
+  drop_na(genome) %>%
+    drop_na(protein_path)
+  
+final_set %>% glimpse
+final_set$protein_path %>% length %>% unique
+final_set$genome %>% length %>% unique
+final_set$protein_path %>%
+  keep(grepl("refseq_proteins", .)) %>%
+  length
+final_set$protein_path %>%
+  keep(grepl("prodigal", .)) %>%
+  length
+
+saveRDS(final_set, glue(
+  "{wkdir}/data/interim/refseq_genomes/",
+  "genus_sampling/{Sys.Date()}_translated-proteins.rds"
+))
+```
+
+#TODO 
+To address potential genome contamination with human reads, we should re-do this analysis while selecting for only Completed Genomes. This will reduce the number of genomes we have to work with, but will also reduce the number of genomes that are contaminated with human reads. 
+
+
+```{r, eval = FALSE}
+
+final_set <- readRDS(glue(
+  "{wkdir}/data/interim/refseq_genomes/",
+  "genus_sampling/2023-06-03_translated-proteins.rds"
+))
+final_set %>%
+  filter(kingdom == "k__Bacteria") %>%
+  pull(assembly_level) %>%
+  table
+
+```
+
+
+For each file loop through files:
+1) copy genome ID at the start of the file, and replace spaces with underscore
+2) concatenate files
+3) replace commas with underscore in fasta headers
+
+```{r, eval = FALSE}
+# 30953 protein files in total
+shell_do(glue("mkdir -p {scratch_dir}/cleaned_fasta"))
+shell_do_clean_fasta <- function(input_fasta_list,
+                                 output_fasta_list,
+                                 prefix_list,
+                                 working_dir = wkdir) {
+  require(glue)
+  require(purrr)
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  bbrename_cmd <- function(input_fasta,
+                           output_fasta,
+                           prefix) {
+    input_fa <- unlist(shell_do_unzip(input_fasta))
+    shell_do(
+      glue(
+        "/home/jboktor/bbmap/bbrename.sh",
+        " in={input_fa}",
+        " out={output_fasta}",
+        " prefix={prefix}",
+        " addprefix",
+        " addunderscore",
+        " fixjunk",
+        " -Xmx100g"
+      )
+    )
+  }
+  run <- purrr::pmap(
+    list(
+      input_fasta_list,
+      output_fasta_list,
+      prefix_list
+    ),
+    ~ bbrename_cmd(
+        input_fasta = ..1,
+        output_fasta = ..2,
+        prefix = ..3
+      )
+  )
+}
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_bbclean-proteins"),
+    memory = "120G",
+    ncpus = 1,
+    walltime = 36000
+  )
+)
+# Chunk files (N per job) and download
+n_jobs <- ceiling(nrow(final_set) / 100)
+bbrename_runs <- listenv()
+tic()
+for (job in 1:n_jobs) {
+  input_list <- chunk_func(final_set$protein_path, n_jobs)[[job]]
+  output_list <- chunk_func(final_set$clean_protein_path, n_jobs)[[job]]
+  genome_id_list <- chunk_func(final_set$genome, n_jobs)[[job]]
+  bbrename_runs[[job]] %<-% shell_do_clean_fasta(
+    input_fasta_list = input_list,
+    output_fasta_list = output_list,
+    prefix_list = genome_id_list
+  )
+}
+toc()
+
+# manually handling bad file name errors
+shell_do("mv /central/scratch/jbok/prodigal_proteins/GCA_943193625.1_gzMucPiri1.1_protein.fasta /central/scratch/jbok/prodigal_proteins/GCA_943193625.1MucPiri1.1_protein.fasta")
+
+shell_do_clean_fasta(
+  input_fasta_list = 
+    list("/central/scratch/jbok/prodigal_proteins/GCA_943193625.1MucPiri1.1_protein.fasta"),
+  output_fasta_list = 
+    list("/central/scratch/jbok/cleaned_fasta/GCA_943193625.1_gzMucPiri1.1_cleaned-protein.fasta"),
+  prefix_list = list("G943193625")
+)
+
+```
+
+Concatenate fasta files
+```{r, eval = FALSE}
+
+## EDIT only concat refseq fastas
+cleannames_refseq <- final_set %>%
+  filter(grepl("refseq_proteins", protein_path)) %>%
+  pull(clean_protein_path)
+
+# concatenate fasta files
+clean_fa_files <- list.files(
+  glue("{scratch_dir}/cleaned_fasta"),
+  pattern = "*cleaned-protein.fasta", full.names = TRUE
+  )
+
+cleannames_refseq %<>% keep(file.exists(.))
+
+# Chunk files (N per job) and download
+future::plan(
+  future.batchtools::batchtools_slurm,
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  resources = list(
+    name = glue("{get_time()}_concat_fasta"),
+    memory = "100G",
+    ncpus = 1,
+    walltime = 7200
+  )
+)
+n_jobs <- ceiling(length(cleannames_refseq) / 400)
+runs <- listenv()
+tic()
+for (job in 1:n_jobs) {
+  input_list <- chunk_func(cleannames_refseq, n_jobs)[[job]]
+  output_faa <- glue("{scratch_dir}/db_chunks/2023-05-30_RefSeq-genus_{job}.fasta")
+  runs[[job]] %<-% shell_do_concat_list(
+    path_list = input_list,
+    output_file = output_faa
+  )
+}
+toc()
+
+pre_chunked_paths <- list.files(
+  glue("{scratch_dir}/db_chunks"),
+  pattern = "*.fasta", full.names = TRUE
+  )
+pb <- progress_bar$new(total = length(pre_chunked_paths),
+  format = "[:bar] :current/:total (:percent)"
+  )
+for (f in pre_chunked_paths) {
+  pb$tick()
+  shell_do(glue("cat {f} >> {scratch_dir}/{Sys.Date()}_RefSeq-genus.fasta"))
+  shell_do(glue("rm {f}"))
+}
+
+```
+
+Creating a custom BLAST database
+```{r, eval = FALSE}
+#  BLAST 2.12.0+
+# creating a blast database from phylogenetic catalog
+create_db_cmd <- glue(
+  "makeblastdb",
+  " -in {scratch_dir}/2023-06-04_RefSeq-genus.fasta",
+  " -dbtype prot",
+  " -out {genus_dir}/blastdb/2023-06-04_RefSeq-genus"
+)
+slurm_shell_do(
+  cmd = create_db_cmd,
+  memory = "200G",
+  ncpu = 1,
+  walltime = 86400
+)
+
+
+# Building a new DB, current time: 06/04/2023 11:47:35
+# New DB name:   /central/groups/MazmanianLab/joeB/Microbiota-Immunomodulation/Microbiota-Immunomodulation/data/interim/refseq_genomes/genus_sampling/blastdb/2023-06-04_RefSeq-genus
+# New DB title:  /central/scratch/jbok/2023-06-04_RefSeq-genus.fasta
+# Sequence type: Protein
+# Keep MBits: T
+# Maximum file size: 1000000000B
+# Adding sequences from FASTA; added 156526985 sequences in 3148.36 seconds.
+
+```
+
+
+
+# Running BLASTp
+Defining blastp slurm function.
+```{r, eval = FALSE}
+run_blastp <- function(input_fasta, output_path, working_dir) {
+  require(glue)
+  require(strex)
+  source(glue("{working_dir}/notebooks/R-scripts/helpers_general.R"))
+  genus_dir <- glue("{working_dir}/data/interim/refseq_genomes/genus_sampling")
+  blastp_cmd <- glue(
+    "blastp -query {input_fasta}",
+    " -db {genus_dir}/blastdb/2023-06-04_RefSeq-genus", 
+    " -outfmt '6 qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'",
+    " -evalue 10",
+    " -num_threads 16",
+    " -max_target_seqs 100000",
+    " -out {output_path}"
+  )
+  shell_do(blastp_cmd)
+}
+```
+
+
+Prepping a batchtools dataframe for slurm parallelization.
+
+```{r, eval = FALSE}
+fasta_paths <- list.files(
+  glue("{wkdir}/data/interim/fastas/processed/monomers/immport"),
+  recursive = TRUE,
+  full.names = TRUE,
+  pattern = "processed_entries.fasta"
+)
+# create output paths
+results_dir <-
+  glue("{wkdir}/data/interim/phylogenetic_analysis/2023-06-04_custom-blast")
+dir.create(
+  results_dir,
+  showWarnings = FALSE,
+  recursive = TRUE
+)
+# list fasta files of interest
+batch_input_df <- data.frame(
+  input_fasta = fasta_paths
+  ) %>%
+  mutate(
+    output_path =
+      strex::str_before_last(input_fasta, "/") %>%
+        strex::str_after_last("/") %>%
+        map_chr(~ glue("{results_dir}/{.}_blastp.out")),
+    working_dir = wkdir
+  ) %>%
+    filter(!file.exists(output_path))
+batch_input_df %>% glimpse
+
+
+```
+
+Execute slurm blastp jobs.
+```{r, eval = FALSE}
+# configure registry ----
+cluster_run <- glue("{get_time()}_blastp/")
+message("\n\nRUNNING:  ", cluster_run, "\n")
+breg <- makeRegistry(
+  file.dir = glue(
+    "{wkdir}/.cluster_runs/",
+    cluster_run
+  ),
+  seed = 42
+)
+breg$cluster.functions <- batchtools::makeClusterFunctionsSlurm(
+  template = glue("{wkdir}/batchtools_templates/batchtools.slurm.tmpl"),
+  scheduler.latency = 0.05,
+  fs.latency = 65
+)
+# Submit Jobs ----
+jobs <- batchMap(
+  fun = run_blastp,
+  args = batch_input_df,
+  reg = breg
+)
+submitJobs(jobs,
+  resources = list(
+    walltime = 43200,
+    memory = 16000,
+    ncpus = 4,
+    max.concurrent.jobs = 9999
+  )
+)
+
+
+```
+
+
+Visualzing Results. Load in data and format tables.
+
+```{r, eval = FALSE}
+# Loading results
+results_paths <- list.files(
+  glue("{wkdir}/data/interim/phylogenetic_analysis/2023-06-04_custom-blast"),
+  full.names = TRUE
+)
+results_paths <- results_paths[file.size(results_paths) > 0]
+
+# read in taxonomy metadata
+tax_metadata <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/metadata.tsv"),
+  header = TRUE,
+  stringsAsFactors = FALSE
+)
+taxid_map <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/taxid.map"),
+  header = FALSE,
+  stringsAsFactors = FALSE,
+  col.names = c("genome", "taxid")
+)
+lineages <- read.delim(
+  glue("{wkdir}/data/interim/refseq_genomes/genus_sampling/lineages.txt"),
+  header = FALSE,
+  stringsAsFactors = FALSE,
+  col.names = c("genome", "lineage")
+)
+
+blastp_colnames <-
+  c(
+    "qaccver", "saccver", "pident", "length", "mismatch",
+    "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"
+  )
+
+tic()
+plan(multisession, workers = 16)
+blastp_res <-
+  results_paths %>%
+  furrr::future_map(
+    ~ read.delim(., header = FALSE, stringsAsFactors = FALSE) %>% 
+      `colnames<-`(blastp_colnames) %>%
+      mutate(
+        genome = strex::str_before_first(saccver, "_")
+      ) %>%
+      # group_by(genome) %>%
+      # slice_min(order_by = evalue, n = 1, with_ties = FALSE) %>%
+      left_join(tax_metadata, by = "genome") %>%
+      left_join(lineages, by = "genome") %>%
+      as_tibble()
+  ) %>%
+  bind_rows()
+toc()
+
+blastp_res %<>% mutate(kingdom = strex::str_before_first(lineage, ";"))
+saveRDS(
+  blastp_res,
+  glue("{wkdir}/data/interim/phylogenetic_analysis/{get_time()}_blastp_res.rds")
+)
+
+blastp_res_plot <- blastp_res %>%
+  group_by(genome, qaccver) %>%
+  slice_min(order_by = evalue, n = 1, with_ties = FALSE) %>%
+  ungroup() %>% 
+  # as.data.table() %>%
+  mutate(
+    root = "root",
+    kingdom = factor(kingdom)
+  ) %>%
+  arrange(kingdom) %>%
+  mutate(genome = factor(genome))
+
+saveRDS(
+  blastp_res_plot,
+  glue("{wkdir}/data/interim/phylogenetic_analysis/{Sys.Date()}_blastp_res_trimmed.rds")
+)
+```
+
+```{r, eval = FALSE}
+library(seriation)
+
+blastp_res_plot <- readRDS(
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "2023-06-04_blastp_res_trimmed.rds"
+  )
+)
+
+blastp_res_plot %<>%
+  mutate(domain = case_when(
+    kingdom %in% c(
+      "k__Eukaryota", "k__Fungi", 
+      "k__Metazoa", "k__Viridiplantae"
+    ) ~ "Eukaryota",
+    kingdom == "k__Archaea" ~ "Archaea",
+    kingdom == "k__Bacteria" ~ "Bacteria",
+    TRUE ~ "ERROR"
+  ))
+
+blastp_res_plot %>% glimpse()
+
+# # Attempt to seriate the data; not working well (taking too long)
+# blastp_res_wide <- blastp_res_plot %>%
+#   select(qaccver, genome, evalue) %>%
+#   mutate(evalue = -log10(evalue + 1)) %>% 
+#   pivot_wider(names_from = qaccver, values_from = evalue, values_fill = 0) %>%
+#   column_to_rownames(var = "genome")
+
+# set.seed(42)
+# top_eids <- blastp_res_plot %>%
+#   group_by(qaccver) %>%
+#   slice_min(order_by = evalue, n = 1, with_ties = FALSE) %>%
+#   ungroup() %>%
+#   slice_min(order_by = evalue, n = 100, with_ties = FALSE) %>%
+#   pull(qaccver) %>%
+#   unique() %>% 
+#   sample(25)
+
+# blastp_res_wide_genomes <- blastp_res_plot %>%
+#   select(qaccver, genome, evalue) %>%
+#   filter(qaccver %in% top_eids) %>%
+#   # mutate(evalue = -log10(evalue + 1)) %>% 
+#   pivot_wider(names_from = qaccver, values_from = evalue, values_fill = 100) %>%
+#   column_to_rownames(var = "genome")
+
+# eid_order <-
+#     blastp_res_wide %>%
+#     t() %>%
+#     dist(method = "euclidean") %>%
+#     seriate(method = "TSP") %>%
+#     get_order()
+# eid_order
+# library(distances)
+# distmat <-
+#   blastp_res_wide_genomes %>%
+#   as.matrix() %>%
+#   distances::distances()
+# genome_order <- 
+#   distance_columns(distmat, 1:nrow(blastp_res_wide_genomes)) %>%
+#   as.matrix() %>%
+#   as.dist() %>%
+#   seriate(method = "OLO") %>%
+#   get_order()
+# saveRDS(
+#   colnames(blastp_res_wide)[eid_order],
+#   glue(
+#     "{wkdir}/data/interim/phylogenetic_analysis/",
+#     "{Sys.Date()}_seriated-eid-order.rds"
+#   )
+# )
+# saveRDS(
+#   rownames(blastp_res_wide)[genome_order],
+#   glue(
+#     "{wkdir}/data/interim/phylogenetic_analysis/",
+#     "{Sys.Date()}_seriated-genome-order.rds"
+#   )
+# )
+
+eid_order <- readRDS(
+  glue(
+    "{wkdir}/data/interim/phylogenetic_analysis/",
+    "2023-06-05_seriated-eid-order.rds"
+  )
+)
+blastp_res_plot %<>% 
+  mutate(qaccver = factor(qaccver,
+    levels = eid_order
+  ))
+
+p_phyloheatmap <- blastp_res_plot %>%
+  ggplot(aes(x = qaccver, y = organism_name)) +
+  geom_tile(aes(fill = evalue)) +
+  scale_fill_viridis(option = "F", direction = 1) +
+  facet_grid(rows = vars(domain), scales = "free_y",
+  space = "free") +
+  theme(
+    strip.text.y = element_text(angle = 0),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank()
+  )
+
+ggsave(
+  glue(
+    "{wkdir}/figures/phylogenomics/",
+    "{Sys.Date()}_blastp_heatmap.png"
+  ),
+  p_phyloheatmap,
+  dpi = 300,
+  width = 10, height = 10
+)
+
+```
+
+![Blastp Results](../figures/phylogenomics/2023-07-05_blastp_heatmap.png){#fig-blastp_results width=100%}
+
+
+
+```{r, eval = FALSE}
+evals <- sort(unique(blastp_res_plot$evalue))
+blastp_res_plot_king_stats <- blastp_res_plot %>%
+  filter(evalue < 1) %>%
+  mutate(neglogevaluep = -log10(evalue + evals[2] / 2)) %>%
+  group_by(qaccver, kingdom) %>%
+  summarize(
+    mean_neglogevaluep = mean(neglogevaluep),
+    max_neglogevaluep = max(neglogevaluep)
+  )
+# blastp_res_plot_king_stats$kingdom %>% unique
+
+p_lineplot_mean <- blastp_res_plot_king_stats %>%
+  mutate(kingdom = factor(kingdom,
+    levels = c(
+      "k__Metazoa", "k__Eukaryota", "k__Viridiplantae",
+      "k__Fungi", "k__Archaea", "k__Bacteria"
+    )
+  )) %>%
+  ggplot(aes(x = kingdom, y = mean_neglogevaluep)) +
+  labs(x = NULL, y = expression(-log[10] ~ "(E-value + impt): Kingdom mean")) +
+    geom_line(aes(group = qaccver), alpha = 0.5, color = "#333333") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(
+  filename = glue(
+    "{wkdir}/figures/phylogenomics/",
+    "{Sys.Date()}_blastp_kingdom-mean-lineplot.png"
+    ),
+  plot = p_lineplot_mean,
+  width = 7,
+  height = 5
+)
+
+p_lineplot_max <- blastp_res_plot_king_stats %>%
+  mutate(kingdom = factor(kingdom,
+    levels = c(
+      "k__Metazoa", "k__Eukaryota", "k__Viridiplantae",
+      "k__Fungi", "k__Archaea", "k__Bacteria"
+    )
+  )) %>%
+  ggplot(aes(x = kingdom, y = max_neglogevaluep)) +
+  labs(x = NULL, y = expression(-log[10] ~ "(E-value + impt): Kingdom max")) +
+    geom_line(aes(group = qaccver), alpha = 0.5, color = "#333333") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(
+  filename = glue(
+    "{wkdir}/figures/phylogenomics/",
+    "{Sys.Date()}_blastp_kingdom-max-lineplot.png"
+    ),
+  plot = p_lineplot_max,
+  width = 7,
+  height = 5
+)
+
+final_lineplot <- p_lineplot_max %>% insert_bottom(p_lineplot_mean)
+ggsave(
+  filename = glue(
+    "{wkdir}/figures/phylogenomics/",
+    "{Sys.Date()}_blastp_kingdom-maxmean-lineplot.png"
+    ),
+  plot = final_lineplot,
+  width = 7,
+  height = 10
+)
+
+```
+
+![Max (top) and Mean (bottom) significance for each ensembl ID across Kingdoms](../figures/phylogenomics/2023-06-22_blastp_kingdom-maxmean-lineplot.png){#fig-blastp_results_lineplot}
+
+
+```{r, eval = FALSE}
+
+workflow_meta <-
+  readRDS(
+    glue(
+      "{wkdir}/data/interim/tmp/",
+      "2023-03-22_workflow-meta-3_HmmersearchQC.rds"
+    )
+  )
+category_df <- workflow_meta %>%
+  select(ensembl_id, contains("Category_")) %>%
+  pivot_longer(-ensembl_id) %>%
+  filter(value == 1) %>%
+  mutate(name = str_remove(name, "Category_")) %>% 
+  group_by(ensembl_id) %>%
+  summarise(gene_category = paste(name, collapse = "_&_"))
+
+saveRDS(
+  category_df,
+  glue("{wkdir}/data/interim/tmp/{Sys.Date()}_gene-categories-EID-df.rds")
+)
+
+workflow_meta %<>%
+  dplyr::left_join(category_df)
+
+blastp_res_plot_domain_stats <- blastp_res_plot %>%
+  filter(evalue < 1) %>%
+  mutate(neglogevaluep = -log10(evalue + evals[2] / 2)) %>%
+  group_by(qaccver, domain) %>%
+  summarize(
+    mean_neglogevaluep = mean(neglogevaluep),
+    max_neglogevaluep = max(neglogevaluep)
+  )
+blastp_res_plot_domain_stats %>% glimpse
+
+blastp_sig_ratio_df <- blastp_res_plot_domain_stats %>%
+  filter(domain %in% c("Bacteria", "Eukaryota")) %>%
+  dplyr::select(-max_neglogevaluep) %>%
+  pivot_wider(
+    names_from = domain,
+    values_from = mean_neglogevaluep
+  ) %>%
+  drop_na(Bacteria) %>% 
+  mutate(mean_neglogeval_ratio_bact_ovr_euk = Bacteria / Eukaryota) %>%
+    dplyr::rename(ensembl_id = qaccver) %>%
+    dplyr::left_join(workflow_meta)
+
+saveRDS(
+  blastp_sig_ratio_df,
+  glue("{wkdir}/data/interim/phylogenetic_analysis/{Sys.Date()}_blastp-domain-sig-ratio-df.rds")
+)
+p_category_blastp_res <- blastp_sig_ratio_df %>%
+    ggplot(aes(
+      x = mean_neglogeval_ratio_bact_ovr_euk, 
+      y = gene_name
+      )) +
+    facet_grid(rows = vars(gene_category), space = "free") +
+    geom_point() +
+    theme_bw() +
+    labs(x = expression(-log[10] ~ "(E-value + impt): Bacteria Mean" / -log[10] ~ "(E-value + impt): Eukaryota Mean"), y = "genes") +
+    theme(
+      axis.text.y = element_blank(),
+      strip.text.y = element_text(angle = 0),
+      panel.grid = element_blank()
+    )
+
+ggsave(
+  glue("{wkdir}/figures/phylogenomics/blastp_results_Bacteria-Metazoa_ratio_category-facet.png"),
+  p_category_blastp_res,
+  width = 13,
+  height = 12
+)
+
+```
+
+
+```{r}
+blastp_sig_ratio_df <- readRDS(
+  glue("{wkdir}/data/interim/phylogenetic_analysis/2023-07-06_blastp-domain-sig-ratio-df.rds")
+)
+blastp_sig_ratio_df %>% DT::datatable(options = list(scrollX = TRUE))
+
+```
+
+
+![Ratio of mean BLASTp E-values (Bacteria/Metazoa, grouped by human immune gene category](../figures/phylogenomics/blastp_results_Bacteria-Metazoa_ratio_category-facet.png){#fig-categorysig}
+
+
+```{r}
+sessionInfo()
+```
+
+

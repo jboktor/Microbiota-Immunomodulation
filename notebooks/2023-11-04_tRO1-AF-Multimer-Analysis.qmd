@@ -1,0 +1,193 @@
+---
+title: "AlphaFold Multimer Complex Docking - tR01 POC"
+editor: visual
+author: "Joe Boktor"
+date: '2023-11-03'
+format: 
+  html:
+    page-layout: full
+    font-family: helvetica neueu
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+Analysis Setup
+
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(glue)
+library(fs)
+library(bio3d)
+library(ggpackets)
+library(ggpointdensity)
+library(viridis)
+library(ggside)
+library(r3dmol)
+library(seriation)
+library(ggmsa)
+library(patchwork)
+library(gghalves)
+library(ggdist)
+library(protr)
+library(reticulate)
+library(readxl)
+# Plotting functions
+homedir <- "/central/groups/MazmanianLab/joeB"
+wkdir <- glue(
+  "{homedir}/",
+  "Microbiota-Immunomodulation/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+docking_dir <- "/central/scratch/jbok/alphafold-multimer/tRO1_POC_2023-11-04"
+fa_dir <- "/central/groups/MazmanianLab/joeB/docking/2023-11-03_tRO1_POC"
+
+```
+
+Reading in multimer model pkl results
+```{r, eval=FALSE}
+use_condaenv("/home/jboktor/miniconda3/envs/pdmbsR/bin/python", required = TRUE)
+source_python(glue("{src_dir}/python_scripts/pickle_reader.py"))
+
+```
+
+Extracting metrics of interest
+```{r, eval=FALSE}
+
+# list all model pkl files ----
+model_pkl_paths <-
+  list.files(
+    docking_dir, pattern = ".pkl", 
+    full.names = TRUE, recursive = TRUE
+  ) %>%
+  keep(!grepl("features", .))
+
+extract_pkl_results <- function(pkl_path) {
+  pkl <- read_pickle_file(pkl_path)
+  data_out <- list(
+    pkl_path = pkl_path,
+    ptm = pkl$ptm,
+    iptm = pkl$iptm,
+    max_predicted_aligned_error = pkl$max_predicted_aligned_error,
+    ranking_confidence = pkl$ranking_confidence
+  )
+  return(data_out)
+}
+
+# future::plan("multisession", workers = 8)
+performance_results <- purrr::map_dfr(
+    model_pkl_paths[1:100], ~ extract_pkl_results(.))
+
+# saveRDS(
+#   performance_results,
+#   glue("{proj_dir}/{Sys.Date()}_multimer_performance_results.rds")
+# )
+```
+
+Visualizing model iPTM scores
+```{r, eval=FALSE}
+# performance_results <- readRDS(
+#   glue("{proj_dir}/2023-06-14_multimer_performance_results.rds")
+# )
+
+peformance_df <-
+  performance_results %>%
+  mutate(
+    complex = basename(dirname(pkl_path)),
+    model_name = basename(pkl_path),
+    ranking_score = ptm + iptm
+  )
+  
+# p_iptms <- 
+peformance_df %>%
+  ggplot(aes(x = fct_reorder(complex, iptm), y = iptm)) +
+  ggdist::stat_interval(
+    .width = c(.25, 0.5, .75, 1),
+    show.legend = T,
+    height = 0.0001
+  ) +
+  gghalves::geom_half_point(
+    side = "l", range_scale = .3, alpha = 0.8,
+    shape = 21, color = "black", size = 1.5
+  ) +
+  scale_color_brewer(palette = "PuBuGn") +
+  theme_light() +
+  coord_flip() +
+  labs(y = "iPTM", x = NULL, color = "interval") +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "top"
+  )
+
+# ggsave(
+#   glue("{proj_dir}/structural_analysis/figures/{Sys.Date()}_iptm.png"),
+#   p_iptms, width = 5, height = 7, dpi = 600
+#   )
+```
+
+![iPTM distributions](/central/groups/MazmanianLab/joeB/docking/projects/neo2_variants/structural_analysis/figures/2023-06-14_iptm.png){#fig-iptms2 height=6.5in}
+
+
+### Comparative Structural Analysis
+
+```{r, eval=FALSE}
+# align_pdb_structures <- function(pdb_path_list) {
+#   color_pal <- viridis::viridis_pal(option = "H")(length(pdb_path_list)) %>% 
+#     strex::str_before_last(., "FF")
+#   # use first pdb in path as the base model
+#   base_pdb <- bio3d::read.pdb(pdb_path_list[1])
+#   base_model <- r3dmol() %>%
+#     m_add_model(data = m_bio3d(base_pdb)) %>%
+#     m_set_style(sel = m_sel(model = 0),
+#                 style = m_style_cartoon(color = color_pal[1]))
+
+#   for (f in 2:length(pdb_path_list)) {
+#     message("\nProcessing file: ", f, " of ", 
+#       length(pdb_path_list), " : ", pdb_path_list[f])
+#     newpdb <- bio3d::read.pdb(pdb_path_list[f])
+#     pdbs_aln <- bio3d::struct.aln(base_pdb,
+#                                   newpdb,
+#                                   exefile = "msa",
+#                                   max.cycles = 100)
+#     newpdb$xyz <- pdbs_aln$xyz
+#     model_n <- f-1
+#     base_model %<>%
+#       m_add_model(data = m_bio3d(newpdb)) %>%
+#       m_set_style(sel = m_sel(model = model_n),
+#                   style = m_style_cartoon(color = color_pal[f])) %>%
+#       m_zoom_to()
+#   }
+#   return(base_model)
+# }
+
+
+
+
+```
+
+Generating 3D visuals
+```{r,eval=FALSE}
+#| output: false
+af_pdb_paths <- list.files(
+  "/central/scratch/jbok/alphafold-multimer/2023-06-13_neo-IL2",
+  full.names = TRUE, recursive = TRUE, pattern = "ranked_0.pdb"
+)
+aligned_pdbs <- align_pdb_structures(pdb_path_list = af_pdb_paths)
+saveRDS(aligned_pdbs, glue("{analysis_dir}/{Sys.Date()}_aligned-PDBs.rds"))
+
+pdb_list <- af_pdb_paths %>% 
+  purrr::set_names() %>% 
+  purrr::map( ~ bio3d::read.pdb(.))
+saveRDS(pdb_list, glue("{analysis_dir}/{Sys.Date()}_af_ranked-0-PDBs.rds"))
+
+```
+
+

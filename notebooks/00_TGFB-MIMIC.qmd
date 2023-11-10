@@ -19,11 +19,11 @@ format:
 
 ## Background
 
-Previous work has shown that an intestinal helminth parasite (*Heligmosomoides polygyrus)* is able to expand host regulatory T-cell populations through activation of TGF-𝛽 receptors[@johnston2017]. Further work went on to identify a protein, *H. polygyrus* TGF-β mimic (*Hp-*TGM), which potently binds host TGF-𝛽 receptors, while containing no sequence-level homology to host TGF-𝛽.
+Previous work has demonstrated that an intestinal helminth parasite (*Heligmosomoides polygyrus)* is able to expand host regulatory T-cell populations through activation of TGF-𝛽 receptors[@johnston2017]. Further work went on to identify a protein, *H. polygyrus* TGF-β mimic (*Hp-*TGM), which potently binds host TGF-𝛽 receptors; however, this protein is reported to display little to no sequence homology to human TGF-𝛽. 
 
 ## Objectives
+In this notebook, we will explore the similarities and differences between human TGF-𝛽 (hTGF-𝛽) and the *H. polygyrus* TGF-β mimic (*Hp-*TGM) using a multi-layered *in-silico* strategy. First, we will compare amino acid sequences between the two proteins searching for local, global, and motif homology. Second, we will employ alphafold multimer for complex structure prediction, and explore the structures of hTGF-𝛽 + hTGF-𝛽 receptor(s) in comparison to HP-TGM + hTGF-𝛽 receptor(s). We will then further improve and our complex predictions using EvoDock (an evolutionary algorithm application of RosettaDock) and determine binding residues and complex binding energies. These analyses will enable quantitative comparisons between sequence, structure, and docking based computational strategies and ultimately guide the development of a high-throughput *in-silico* screen for human immune system host-microbe-interactions (HMI).
 
-In this notebook, we will compare human TGF-𝛽 to the *H. polygyrus* TGF-β mimic (*Hp-*TGM) *in-silico* using a multi-layered strategy. First, we will compare amino acid sequences between the two proteins searching for both local and global homology. Second, we will fold these two proteins using ESM2 and compare structural motifs. Finally we will employ molecular docking between the two proteins and the human TGF-𝛽 receptor (\_\_\_\_). These analyses will help us determine the comparative value of sequence, structural, and molecular docking based computational approaches when comparing evolutionary convergent protein-receptor binding pairs.
 
 ## Analysis
 
@@ -50,6 +50,7 @@ library(r3dmol)
 library(strex)
 library(plotly)
 library(ggsci)
+library(data.table)
 
 tmpdir <- "/central/scratch/jbok/tmp"
 homedir <- "/central/groups/MazmanianLab/joeB"
@@ -79,6 +80,7 @@ tgfb_search %<>% filter(biotype == "protein_coding", gene_name %in% tgf_keys)
 # collect amino acid sequences for each protein using the ensembl_id
 tgfb_search %<>% mutate(sequences_aa =  map_chr(ensembl_id, gget_seq))
 
+# Manually editing sequences - removing unwanted subdomains within pro-proteins
 HP_TMG_SEQ <- "DDSGCMPFSDEAATYKYVAKGPKNIEIPAQIDNSGMYPDYTHVKRFCKGLHGEDTTGWFVGICLASQWYYYEGVQECDDRRCSPLPTNDTVSFEYLKATVNPGIIFNITVHPDASGKYPELTYIKRICKNFPTDSNVQGHIIGMCYNAEWQFSSTPTCPASGCPPLPDDGIVFYEYYGYAGDRHTVGPVVTKDSSGNYPSPTHARRRCRALSQEADPGEFVAICYKSGTTGESHWEYYKNIGKCPDPRCKPLEANESVHYEYFTMTNETDKKKGPPAKVGKSGKYPEHTCVKKVCSKWPYTCSTGGPIFGECIGATWNFTALMECINARGCSSDDLFDKLGFEKVIVRKGEGSDSYKDDFARFYATGSKVIAECGGKTVRLECSNGEWHEPGTKTVHRCTKDGIRTL"
 TGFB1 <- "ALDTNYCFSSTEKNCCVRQLYIDFRKDLGWKWIHEPKGYHANFCLGPCPYIWSLDTQYSKVLALYNQHNPGASAAPCCVPQALEPLPIVYYVGRKPKVEQLSNMIVRSCKCS"
 TGFB2 <- "ALDAAYCFRNVQDNCCLRPLYIDFKRDLGWKWIHEPKGYNANFCAGACPYLWSSDTQHSRVLSLYNTINPEASASPCCVSQDLEPLTILYYIGKTPKIEQLSNMIVKSCKCS"
@@ -281,6 +283,7 @@ for (tf in tgf_tf) {
 }
 
 ```
+
 
 ### Sequence Similarity (Local & Global)
 
@@ -568,37 +571,86 @@ for (id in basename(hmmer_results_paths)) {
 #### HP-TGM
 
 ```{r}
+#| label: fig-HMMER1
+#| fig-cap: "HP-TGM profile Hidden Markov Model hits (E value <= 0.05) against our custom microbial protein catalog. The x and y axes display E-value signifiance for the overall sequence and the best domain, respectively. Points are colored by the subcatalog of origin."
+
 ggplotly(hmmer_hit_plots$`HP-TGM` )
 ```
 
 #### TGF-β1
 ```{r}
+#| label: fig-HMMER2
+#| fig-cap: "TGF-β1 profile Hidden Markov Model hits (E value <= 0.05) against our custom microbial protein catalog. The x and y axes display E-value signifiance for the overall sequence and the best domain, respectively. Points are colored by the subcatalog of origin."
+
 ggplotly(hmmer_hit_plots$TGFB1)
 ```
 
 #### TGF-β2
 ```{r}
+#| label: fig-HMMER3
+#| fig-cap: "TGF-β2 profile Hidden Markov Model hits (E value <= 0.05) against our custom microbial protein catalog. The x and y axes display E-value signifiance for the overall sequence and the best domain, respectively. Points are colored by the subcatalog of origin."
+
 ggplotly(hmmer_hit_plots$TGFB2)
 ```
 
 #### TGF-β3
 ```{r}
+#| label: fig-HMMER4
+#| fig-cap: "TGF-β3 profile Hidden Markov Model hits (E value <= 0.05) against our custom microbial protein catalog. The x and y axes display E-value signifiance for the overall sequence and the best domain, respectively. Points are colored by the subcatalog of origin."
+
 ggplotly(hmmer_hit_plots$TGFB3)
 ```
 :::
 
+### **Key Conclusions:**
+
+-   HP-TGM shares little to no sequence similarity with human human TGF-β isomers as indicated by local and global alignment.
+-   When analyzing sequence motifs, HP-TGM displays similarity to Complement Control Protein (CCP, or Sushi) family domains, suggesting an entirely alternative origin than human TGF-β.
+
 
 ### Structural Analysis and Complex Predictions
 
-```{r}
+Executing alpha-fold multimer models
+
+```{r, eval=FALSE}
+
+cluster_reports <- glue(
+  "{wkdir}/.cluster_runs/",
+  "{Sys.Date()}_AlphaFold-Multimer_TGFB-trimmedseqs_{rand_string()}"
+)
+message("\n\n CREATING:  ", cluster_reports, "\n")
+shell_do(glue("mkdir -p {cluster_reports}"))
+
+complex_fastas <-
+  list.files(
+    glue("{wkdir}/data/interim/fastas/processed/complexes"),
+    # glue("{wkdir}/data/interim/alphafold-multimer/TGFB_fasta"),
+    full.names = TRUE
+  )
+
+for (complex_path in complex_fastas) {
+  jname <- fs::path_ext_remove(basename(complex_path))
+  slurm_run_alphafold(
+    jobname = jname,
+    slurm_out = cluster_reports,
+    input_fasta = complex_path,
+    mem = "128G",
+    gpus = 1,
+    cpus_per_task = 8,
+    output_dir = glue("{wkdir}/data/interim/alphafold-multimer/2023-02-28_TGFB_complexes/{jname}")
+  )
+}
+```
+
+```{r, eval=FALSE}
 
 receptor_ligand_pairs <- c(
-  # "TGFB1_TGFBR1",
-  # "TGFB2_TGFBR2",
-  # "TGFB3_TGFBR1_TGFBR2",
-  # "TGFB2_TGFBR1",
-  # "TGFB2_TGFBR2",
-  # "TGFB2_TGFBR1_TGFBR2",
+  "TGFB1_TGFBR1",
+  "TGFB2_TGFBR2",
+  "TGFB3_TGFBR1_TGFBR2",
+  "TGFB2_TGFBR1",
+  "TGFB2_TGFBR2",
+  "TGFB2_TGFBR1_TGFBR2",
   "TGFB3_TGFBR1",
   "TGFB3_TGFBR2",
   "TGFB3_TGFBR1_TGFBR2",
@@ -611,7 +663,8 @@ pdb_models <- list()
 for (pair in receptor_ligand_pairs) {
   pdb_data <- bio3d::read.pdb(
     glue(
-      "{wkdir}/data/interim/alphafold-multimer/{pair}/{pair}",
+      "{wkdir}/data/interim/alphafold-multimer/",
+      "2023-02-28_TGFB_complexes/{pair}/{pair}",
       "/ranked_0.pdb"
     ),
     multi = TRUE
@@ -637,6 +690,16 @@ for (pair in receptor_ligand_pairs) {
   
 }
 
+saveRDS(pdb_models,
+     glue("{wkdir}/data/interim/tgfb_analyses/{Sys.Date()}_r3dmol-complexes.rds")
+     )
+```
+
+```{r}
+pdb_models <- readRDS(
+     glue("{wkdir}/data/interim/tgfb_analyses/2023-03-02_r3dmol-complexes.rds")
+     )
+
 ```
 
 ::: panel-tabset
@@ -651,7 +714,7 @@ pdb_models$TGFB3_TGFBR1
 pdb_models$TGFB3_TGFBR2
 ```
 
-#### [TGF-β3 - TGF-βR1 - TGF-βR2]
+#### [TGF-β3 - TGF-βR1 - TGF-βR2]        
 ```{r}
 pdb_models$TGFB3_TGFBR1_TGFBR2
 ```
@@ -673,28 +736,26 @@ pdb_models$`HP-TGM_TGFBR1_TGFBR2`
 
 :::
 
-
 ### Complex Binding Energies
+In-progress
 
 ### Binding Interface Analysis
-
-
+In-progress
 
 ## Methods
 
 **Signal Peptide Removal**
-Signal Peptide 
-Signal peptide prediction model based on a Bert protein language model encoder and a conditional random field (CRF) decoder.
- organism as eukarya to trigger post-processing 
-of the SP predictions to prevent spurious results 
-(only predicts type Sec/SPI). using fast mode 
+SignalP 6.0 (fast) was used to predict and trim signal peptides. This prediction prediction model is based on a Bert protein language model encoder and a conditional random field (CRF) decoder.
 
-**Sequence Similarity Analysis**
+**Sequence Alignment**
+Needleman-Wunsch and Smith-Waterman algorithms were applied using [emboss](https://anaconda.org/bioconda/emboss) v6.6.0.
 
+**profile Hidden Markov Model Analysis**
+profile Hidden Markov Models were created using jackhmmer from HMMER v.3.3, with a maximum of 5 iterations and an E-value threshold of 0.05 against the latest UniProt catalog (as of 2023-03-02). Hidden models were assembled via hmmbuild and hmmsearch was applied against our custom microbial catalog database.
 
-**Structural Similarity**
+**Protein Complex Structure Prediction**
+Alphafold v2.2.0 was applied using the "multimer" setting. 
 
-**Docking**
 
 **R-Packages**
 ```{r}
