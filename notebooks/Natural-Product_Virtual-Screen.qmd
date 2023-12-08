@@ -1,0 +1,291 @@
+---
+title: "DiffDock Virtual Screen"
+editor: visual
+author: "Joe Boktor"
+date: '2023-11-29'
+format: 
+  html:
+    font-family: helvetica neue
+    page-layout: full
+    toc: true
+    toc-location: left
+    toc-depth: 5
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+    grid:
+      sidebar-width: 200px
+      body-width: 1100px
+      margin-width: 200px
+      gutter-width: 1.5em
+bibliography: references.bib
+---
+
+## Analysis Setup
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(magrittr)
+library(reticulate)
+library(glue)
+library(bio3d)
+library(protr)
+library(seqinr)
+library(future)
+library(batchtools)
+library(future.batchtools)
+library(furrr)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+# library(strex)
+library(data.table)
+library(kableExtra)
+library(Biostrings)
+# Plotting functions
+library(ggpackets)
+library(ggpointdensity)
+library(ggside)
+library(patchwork)
+library(ggridges)
+library(scales)
+library(plotly)
+library(ggsci)
+library(viridis)
+library(ggforce)
+library(seriation)
+# protein structure analysis
+library(bio3d)
+library(r3dmol)
+
+# tmpdir <- "/central/scratch/jbok/tmp"
+# homedir <- "/central/groups/MazmanianLab/joeB"
+
+homedir <- "/mnt/nvme0/jbok"
+diffdock_dir <- "/mnt/nvme0/jbok/docking/DiffDock"
+wkdir <- glue(
+"{homedir}/Microbiota-Immunomodulation"
+)
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R_scripts/helpers_general.R"))
+source(glue("{src_dir}/R_scripts/helpers_pdb-wrangling.R"))
+
+dd_wkir <- glue("{wkdir}/data/interim/diffdock_screen")
+pdb_dir <- glue("{dd_wkir}/pdb")
+fa_dir <- glue("{dd_wkir}/fasta")
+embed_dir <- glue("{dd_wkir}/esm_embeddings")
+cache_dir <- glue("{dd_wkir}/cache")
+results_dir <- glue("{dd_wkir}/results")
+dir.create(pdb_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(fa_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(embed_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
+
+# 1.5gb  limit (1500*1024^2 = 1572864000)
+# options(future.globals.maxSize= 1572864000)
+```
+
+Loading in data from natural product atlas
+
+
+Screeing natural products against GPCR Ligands
+```{r}
+#'function to download pdb files, input should be either four letter code (ie., 5p21) or 
+#' AlphaFold ID (ie, AF-P35869-F1--model_v3), with no .pdb ext
+download_pdb_file <- function(pdb_id) {
+  if (nchar(pdb_id) > 4){
+    if (file.exists(file.path(pdb_dir, glue("{pdb_id}.pdb")))) {
+      return(NULL)
+    }
+    shell_do(
+      glue(
+        "cd {pdb_dir} &&",
+        " wget https://alphafold.ebi.ac.uk/files/{pdb_id}.pdb"
+        )
+    )
+  } else {
+    get.pdb(pdb_id, path = pdb_dir)
+  }
+}
+
+prep_esm_embedding <- function(pdb_id) {
+  if (!file.exists(glue("{fa_dir}/{pdb_id}.fasta"))){
+    cmd <- glue(
+      "mamba run -n diffdock",
+      " python {diffdock_dir}/datasets/esm_embedding_preparation.py",
+      " --protein_path {pdb_dir}/{pdb_id}.pdb",
+      " --out_file {fa_dir}/{pdb_id}.fasta"
+      )
+    print(cmd)
+    shell_do(cmd)
+  } else {
+    message(pdb_id, " fasta file exists, skipping ... ")
+  }
+}
+
+embed_seq <- function(gpu_id, pdb_id) {
+  require(glue)
+  homedir <- "/mnt/nvme0/jbok"
+  diffdock_dir <- glue("{homedir}/docking/DiffDock")
+  wkdir <- glue("{homedir}/Microbiota-Immunomodulation")
+  src_dir <- glue("{wkdir}/notebooks")
+  dd_wkir <- glue("{wkdir}/data/interim/diffdock_screen")
+  pdb_dir <- glue("{dd_wkir}/pdb")
+  fa_dir <- glue("{dd_wkir}/fasta")
+  embed_dir <- glue("{dd_wkir}/esm_embeddings")
+  esm2_output <- glue("{embed_dir}/{pdb_id}")
+  source(glue("{src_dir}/R_scripts/helpers_general.R"))  
+  
+  if (dir.exists(esm2_output)) {
+    message(pdb_id, " embedding dir exists, skipping ... ")
+    return(NULL)
+  }
+  dir.create(esm2_output, showWarnings=FALSE)
+  cmd <- glue(
+    "cd {diffdock_dir} &&",
+    " CUDA_VISIBLE_DEVICES={gpu_id}",
+    " mamba run -n diffdock",
+    " HOME={diffdock_dir}/esm/model_weights",
+    " PYTHONPATH=$PYTHONPATH:/mnt/nvme0/jbok/docking/DiffDock/esm ",
+    " python {diffdock_dir}/esm/scripts/extract.py esm2_t33_650M_UR50D",
+    " {fa_dir}/{pdb_id}.fasta",
+    " {esm2_output}",
+    " --repr_layers 33",
+    " --include per_tok",
+    " --truncation_seq_length 30000"
+  )
+  shell_do(cmd)
+}
+
+run_diffdock <- function(gpu_id, pdb_id, ligand_name, smile) {
+  require(glue)
+  homedir <- "/mnt/nvme0/jbok"
+  diffdock_dir <- glue("{homedir}/docking/DiffDock")
+  wkdir <- glue("{homedir}/Microbiota-Immunomodulation")
+  src_dir <- glue("{wkdir}/notebooks")
+  dd_wkir <- glue("{wkdir}/data/interim/diffdock_screen")
+  pdb_dir <- glue("{dd_wkir}/pdb")
+  fa_dir <- glue("{dd_wkir}/fasta")
+  cache_dir <- glue("{dd_wkir}/cache")
+  results_dir <- glue("{dd_wkir}/results")
+  embed_dir <- glue("{dd_wkir}/esm_embeddings")
+  esm2_output <- glue("{embed_dir}/{pdb_id}")
+  source(glue("{src_dir}/R_scripts/helpers_general.R"))  
+  
+  if (file.exists(
+    glue("{results_dir}/{pdb_id}_{ligand_name}/ranked_results/rank1.sdf")
+    )){
+    return(NULL)
+  }
+  
+  cmd <- glue(
+    "cd {diffdock_dir} &&",
+    " CUDA_VISIBLE_DEVICES={gpu_id}",
+    " mamba run -n diffdock",
+    " python -m inference",
+    " --protein_path {pdb_dir}/{pdb_id}.pdb",
+    " --ligand '{smile}' ",
+    " --esm_embeddings_path {esm2_output}",
+    " --out_dir {results_dir}/{pdb_id}_{ligand_name}",
+    " --out_name ranked_results",
+    " --cache_path {cache_dir}/{pdb_id}_{ligand_name}",
+    " --inference_steps 20",
+    " --samples_per_complex 20",
+    " --batch_size 6"
+  )
+  # print(cmd)
+  shell_do(cmd)
+}
+
+
+```
+
+
+```{r}
+protein_list <- c(
+  "GPR109A" = "7XK2",
+  "GPR109B" = "AF-P49019-F1-model_v3",
+  "mTOR" = "1FAP",
+  "AhR" = "AF-P35869-F1-model_v3"
+)
+
+# Download PDBs
+purrr::map(
+  protein_list,
+  download_pdb_file
+)
+
+# Extract AA Seq int0 FASTA file
+purrr::map(
+  protein_list,
+  prep_esm_embedding
+)
+
+# Embed FASTA with esm2_t33_650M_UR50D
+future::plan("multisession", workers = 8)
+furrr::future_map2(
+  .x = seq_along(protein_list) %% 8,
+  .y = protein_list,
+  ~ embed_seq(gpu_id = .x, pdb_id =  .y)
+)
+
+```
+
+Aryl-hydrocarbon - NP screep
+
+```{r}
+np_atlas <- read_tsv(glue("{wkdir}/data/input/NPAtlas_download.tsv")) %>%
+    glimpse
+
+np_atlas_df <- np_atlas %>%
+    filter(origin_type == "Bacterium") %>%
+    glimpse
+
+rep_seq <- function(x, n) {
+  purrr::map(x,  ~ rep(., n)) %>% list_c()
+  }
+
+batch_info <- data.frame(
+  "pdb_id" =  rep_seq(unname(protein_list), length(np_atlas_df$npaid)),
+  "ligand_name" =  rep(np_atlas_df$npaid, length(protein_list)),
+  "smile" = rep(np_atlas_df$compound_smiles, length(protein_list))
+) %>%
+  mutate(
+    expected_output = glue(
+      "{results_dir}/{pdb_id}_{ligand_name}/",
+      "ranked_results/rank1.sdf"
+      ),
+    run_complete = purrr::map_lgl(expected_output, file.exists)
+  ) %>% 
+  filter(!run_complete) %>% 
+  glimpse
+
+```
+
+```{r}
+batch_info %>% glimpse
+dock_args <- list(
+  "gpu_id" = seq_along(batch_info$pdb_id) %% 8,
+  "pdb_id" =  batch_info$pdb_id,
+  "ligand_name" =  batch_info$ligand_name,
+  "smile" = batch_info$smile
+)
+# dock_args %>% glimpse
+
+# apply your function to each combination of arguments in parallel
+future::plan("multisession", workers = 8)
+furrr::future_pmap(dock_args, run_diffdock)
+
+```
+
+
+```{r}
+
+
+
+
+```

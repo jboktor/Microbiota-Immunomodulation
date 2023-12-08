@@ -1,0 +1,241 @@
+---
+title: "Folding the hCom2 Proteome"
+editor: visual
+author: "Joe Boktor"
+date: '2023-11-03'
+format: 
+  html:
+    page-layout: full
+    font-family: helvetica neueu
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    self-contained: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+---
+
+Using ESMFold, here we will fold the entirety of HCom2 coding sequences.
+
+
+Analysis Setup
+
+A trill mamba environment was setup using the following:
+```{r}
+# mamba create -y -n TRILL python=3.10 ; mamba activate TRILL
+# mamba install -y pytorch==1.13.1 pytorch-cuda=11.7 -c pytorch -c nvidia && \
+# mamba install -y -c conda-forge openmm swig pdbfixer openbabel smina fpocket vina && \
+# mamba install -y -c bioconda pyrsistent foldseek &&\
+# mamba install -y -c pyg pyg=2.3.1=py310_torch_1.13.0_cu117 pytorch-cluster=1.6.1=py310_torch_1.13.0_cu117 pytorch-sparse=0.6.17=py310_torch_1.13.0_cu117 pytorch-scatter=2.1.1=py310_torch_1.13.0_cu117 && \
+# mamba install -y -c bioconda -c "dglteam/label/cu117" dgl
+# # pip install git+https://github.com/martinez-zacharya/lightdock.git@03a8bc4888c0ff8c98b7f0df4b3c671e3dbf3b1f
+# pip install trill-proteins
+```
+
+```{r}
+#| warning: false
+library(tidyverse)
+library(reticulate)
+library(magrittr)
+library(glue)
+library(seqinr)
+library(future)
+library(batchtools)
+# library(future.batchtools)
+library(fs)
+library(tictoc)
+library(listenv)
+library(progress)
+library(viridis)
+library(bio3d)
+library(r3dmol)
+# library(strex)
+library(plotly)
+library(ggsci)
+library(data.table)
+
+tmpdir <- "/central/scratch/jbok/tmp"
+homedir <- "/mnt/nvme0/jbok"
+wkdir <- glue("{homedir}/Microbiota-Immunomodulation")
+src_dir <- glue("{wkdir}/notebooks")
+source(glue("{src_dir}/R-scripts/helpers_general.R"))
+source(glue("{src_dir}/R-scripts/helpers_sequence-screens.R"))
+source(glue("{src_dir}/R-scripts/rhmmer-package.R"))
+# protein_catalogs <- glue("{homedir}/", "Downloads/protein_catalogs")
+# shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/raw/monomers"))
+# shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/processed/monomers"))
+# shell_do(glue("mkdir -p {wkdir}/data/interim/fastas/processed/complexes"))
+```
+
+
+
+Read in hcom2 proteins of interest
+
+```{r}
+hcom2_select_fa <- glue(
+    "{wkdir}/data/input/",
+    "hCom2-top-500-dmnd-hits-per-fldsk-target.fasta"
+)
+hcom_seqs <- seqinr::read.fasta(hcom2_select_fa, seqtype = "AA")
+hcom2_fa_seqs <- names(hcom_seqs) %>%
+    purrr::set_names() %>%
+    purrr::map(
+    ~ seqinr::getSequence(hcom_seqs[[.]], as.string = TRUE) %>%
+    unlist() %>% 
+    gsub("\\*", "", .)
+    )
+
+prot2fold_dir <- glue("{wkdir}/data/interim/hCom2_fasta_to_fold")
+esmfold_results <- glue("{wkdir}/data/interim/hCom2_ESMFolds")
+dir.create(prot2fold_dir, showWarnings = FALSE)
+dir.create(esmfold_results, showWarnings = FALSE)
+```
+
+
+
+Saving individual hCom2 proteins to fold in new folder
+```{r}
+# names(hcom2_fa_seqs) %>%
+#   purrr::map(
+#     ~ seqinr::write.fasta(
+#       sequences = unlist(hcom2_fa_seqs[.]),
+#       names = .,
+#       file.out = glue("{'prot2fold_dir'}/{.}.fa"),
+#       open = "a",
+#       nbchar = 1e100,
+#       as.string = FALSE
+#     )
+#   )
+
+```
+
+
+list fasta file paths
+
+```{r}
+# folding order 
+fa_paths <- list.files(prot2fold_dir, full.names=TRUE)
+names(fa_paths) <- fa_paths %>% basename() %>% fs::path_ext_remove()
+fold_order <- hcom2_fa_seqs %>% nchar() %>% sort()
+ordered_fa_paths <- fa_paths[names(fold_order)]
+
+```
+
+
+Defining an R wrapper for TRILL ESMFold
+
+```{r}
+trill_esm_fold <- function(run_name, gpu_id, fasta) {
+    require(glue)
+    cmd <- glue(
+        "cd /mnt/nvme0/jbok/Microbiota-Immunomodulation/data/interim/hCom2_ESMFolds &&",
+        " CUDA_VISIBLE_DEVICES={gpu_id}",
+        " conda run -n TRILL",
+        " trill {run_name} 1 fold ESMFold {fasta}"
+        )
+    shell_do(cmd)
+}
+
+trill_esm_fold_cpu <- function(run_name, fasta) {
+    require(glue)
+    cmd <- glue(
+        "cd /mnt/nvme0/jbok/Microbiota-Immunomodulation/data/interim/hCom2_ESMFolds &&",
+        " conda run -n TRILL",
+        " trill {run_name} 0 fold ESMFold {fasta}"
+        )
+    shell_do(cmd)
+}
+
+trill_esm_fold_gpu_parallel <- function(run_name, fasta) {
+    require(glue)
+    cmd <- glue(
+        "cd /mnt/nvme0/jbok/Microbiota-Immunomodulation/data/interim/hCom2_ESMFolds &&",
+        " conda run -n TRILL",
+        " trill {run_name} 8 fold ESMFold {fasta} --strategy 32"
+        )
+    shell_do(cmd)
+}
+
+trill_esm_fold_gpu_parallelv2 <- function(run_name, gpu_id, fasta) {
+    require(glue)
+    cmd <- glue(
+        "cd /mnt/nvme0/jbok/Microbiota-Immunomodulation/data/interim/hCom2_ESMFolds &&",
+        " CUDA_VISIBLE_DEVICES={gpu_id}",
+        " conda run -n TRILL",
+        " trill {run_name} 8 fold ESMFold {fasta} --strategy 256"
+        )
+    shell_do(cmd)
+}
+```
+
+Looping through runs
+
+```{r}
+
+# fa_to_fold <- ordered_fa_paths %>% 
+#     discard(file.exists(glue("{esmfold_results}/{names(.)}.pdb")) )
+
+# batch_data <- data.frame(
+#     "fasta" = unname(fa_to_fold),
+#     "run_name" = names(fa_to_fold)) %>%
+#   mutate(
+#     gpu_id = (seq_along(run_name) * 2) %% 8,
+#     gpu_id = glue("{gpu_id},{gpu_id+1}")
+#     )
+# batch_data %>% glimpse
+
+# future::plan("multisession", workers = 4)
+# seq_along(batch_data$fasta) %>%
+#     furrr::future_map(
+#       ~ trill_esm_fold_gpu_parallelv2(
+#         run_name = batch_data$run_name[.],
+#         gpu_id = batch_data$gpu_id[.],
+#         fasta = batch_data$fasta[.]
+#         )
+#     )
+
+# furrr::future_map2(
+#     .x = fa_to_fold[1:16],
+#     .y = rep(0:7, 2),
+#     ~ trill_esm_fold(
+#     run_name = fs::path_ext_remove(basename(.x)),
+#     gpu_id = .y,
+#     fasta = .x
+#     )
+# )
+
+# gpu_id = seq_along(.) %% 8,
+
+```
+
+```{r}
+
+fa_to_fold <- ordered_fa_paths %>% 
+    discard(file.exists(glue("{esmfold_results}/{names(.)}.pdb")) ) #%>%
+    # remove seqs above 1500 AAs\
+    # discard(names(.) %in%  long_seqs)
+
+# long_seqs <- fold_order %>% keep(. > 1000) %>% names()
+# for (i in seq_along(fa_to_fold)) {
+#     trill_esm_fold(
+#       run_name = names(fa_to_fold)[i],
+#       gpu_id = i %% 8,
+#       fasta = unname(fa_to_fold)[i]
+#       )
+#       }
+# for (i in seq_along(fa_to_fold)) {
+#     trill_esm_fold_cpu(
+#         run_name = names(fa_to_fold)[i],
+#         fasta = unname(fa_to_fold)[i]
+#         )
+        # }
+
+for (i in seq_along(fa_to_fold)) {
+    trill_esm_fold_gpu_parallel(
+        run_name = names(fa_to_fold)[i],
+        fasta = unname(fa_to_fold)[i]
+        )
+    }
+
+```
